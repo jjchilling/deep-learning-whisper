@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, List, Optional, Tuple, Union
 import numpy as np
 import torch
 import tqdm
+import tensorflow as tf
 
 from .audio import (
     FRAMES_PER_SECOND,
@@ -124,15 +125,15 @@ def transcribe(
     A dictionary containing the resulting text ("text") and segment-level details ("segments"), and
     the spoken language ("language"), which is detected when `decode_options["language"]` is None.
     """
-    dtype = torch.float16 if decode_options.get("fp16", True) else torch.float32
-    if model.device == torch.device("cpu"):
-        if torch.cuda.is_available():
-            warnings.warn("Performing inference on CPU when CUDA is available")
-        if dtype == torch.float16:
-            warnings.warn("FP16 is not supported on CPU; using FP32 instead")
-            dtype = torch.float32
+    dtype = tf.float16 if decode_options.get("fp16", True) else tf.float32
+    # if model.device == torch.device("cpu"):
+    #     if torch.cuda.is_available():
+    #         warnings.warn("Performing inference on CPU when CUDA is available")
+    #     if dtype == torch.float16:
+    #         warnings.warn("FP16 is not supported on CPU; using FP32 instead")
+    #         dtype = torch.float32
 
-    if dtype == torch.float32:
+    if dtype == tf.float32:
         decode_options["fp16"] = False
 
     # Pad 30-seconds of silence to the input audio, for slicing
@@ -148,7 +149,8 @@ def transcribe(
                 print(
                     "Detecting language using up to the first 30 seconds. Use `--language` to specify the language"
                 )
-            mel_segment = pad_or_trim(mel, N_FRAMES).to(model.device).to(dtype)
+            mel_segment = pad_or_trim(mel, N_FRAMES)
+            mel_segment = tf.cast(mel_segment, dtype)
             _, probs = model.detect_language(mel_segment)
             decode_options["language"] = max(probs, key=probs.get)
             if verbose is not None:
@@ -592,7 +594,9 @@ def cli():
 
     from . import load_model
 
-    model = load_model(model_name, device=device, download_root=model_dir)
+    #model = load_model(model_name, device=device, download_root=model_dir)
+
+    model = load_model(model_name, download_root=model_dir)
 
     writer = get_writer(output_format, output_dir)
     word_options = [

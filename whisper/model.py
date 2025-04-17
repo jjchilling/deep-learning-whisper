@@ -10,9 +10,9 @@ import tensorflow as tf
 # import torch.nn.functional as F
 # from torch import Tensor, nn
 
-from decoding import decode as decode_function
-from decoding import detect_language as detect_language_function
-from transcribe import transcribe as transcribe_function
+from .decoding import decode as decode_function
+from .decoding import detect_language as detect_language_function
+from .transcribe import transcribe as transcribe_function
 
 # try:
 #     from torch.nn.functional import scaled_dot_product_attention
@@ -97,6 +97,8 @@ class Conv1d(tf.keras.layers.Conv1D):
 def sinusoids(length, channels, max_timescale=10000):
     """Returns sinusoids for positional embedding"""
     assert channels % 2 == 0
+    length = tf.cast(length, tf.float32)
+    channels = tf.cast(channels, tf.float32)
     log_timescale_increment = np.log(max_timescale) / (channels // 2 - 1)
     inv_timescales = tf.exp(-log_timescale_increment * tf.range(channels // 2))
     scaled_time = tf.range(length)[:, tf.newaxis] * inv_timescales[tf.newaxis, :]
@@ -272,9 +274,9 @@ class ResidualAttentionBlock(tf.keras.layers.Layer):
 
         n_mlp = n_state * 4
         self.mlp = tf.keras.Sequential([
-            Linear(n_state, n_mlp), 
+            Linear(n_mlp), 
             tf.keras.layers.Activation('gelu'), 
-            Linear(n_mlp, n_state)
+            Linear(n_state)
         ])
         self.mlp_ln = LayerNorm(n_state)
 
@@ -321,8 +323,8 @@ class AudioEncoder(tf.keras.layers.Layer):
         self, n_mels: int, n_ctx: int, n_state: int, n_head: int, n_layer: int
     ):
         super().__init__()
-        self.conv1 = Conv1d(n_mels, n_state, kernel_size=3, padding=1)
-        self.conv2 = Conv1d(n_state, n_state, kernel_size=3, stride=2, padding=1)
+        self.conv1 = Conv1d(n_state, kernel_size=3, strides=1, padding='same')
+        self.conv2 = Conv1d(n_state, kernel_size=3, strides=2, padding='valid')
         self.positional_embeding = sinusoids(n_ctx, n_state)
 
         self.blocks = [ResidualAttentionBlock(n_state, n_head) for _ in range(n_layer)]
@@ -390,8 +392,9 @@ class TextDecoder(tf.keras.layers.Layer):
         super().__init__()
 
         self.token_embedding = tf.keras.layers.Embedding(n_vocab, n_state)
-        self.positional_embedding = self.add_variable(
+        self.positional_embedding = self.add_weight(
             shape=(n_ctx, n_state),
+            initializer="random_normal",
             name="positional_embedding"
         )
 
@@ -404,7 +407,12 @@ class TextDecoder(tf.keras.layers.Layer):
         # this is super sus highkey
         inf_fill = tf.fill((n_ctx, n_ctx), -np.inf)
         mask = np.triu(inf_fill, k=1)
-        self.mask = mask
+        self.mask = self.add_weight(
+            shape=(n_ctx, n_ctx),
+            initializer=tf.constant_initializer(mask),
+            trainable=False,
+            name="mask"
+        )
 
 
 #     def forward(self, x: Tensor, xa: Tensor, kv_cache: Optional[dict] = None):
@@ -502,7 +510,7 @@ class Whisper(tf.keras.Model):
         # use the last half among the decoder layers for time alignment by default;
         # to use a specific set of heads, see `set_alignment_heads()` below.
         all_heads = np.zeros(
-            self.dims.n_text_layer, self.dims.n_text_head, bool
+            (self.dims.n_text_layer, self.dims.n_text_head), bool
         )
         all_heads[self.dims.n_text_layer // 2 :] = True
         self.alignment_heads = tf.sparse.from_dense(tf.convert_to_tensor(all_heads))
@@ -523,6 +531,9 @@ class Whisper(tf.keras.Model):
             self.dims.n_text_layer, self.dims.n_text_head
         ))
         self.alignment_heads = tf.sparse.from_dense(mask)
+        # self.add_weight(name='alignment_heads',
+        #                 shape=
+        #                 initializer=tf.initself.alignment_heads, trainable=False)
 
     # def embed_audio(self, mel: torch.Tensor):
     #     return self.encoder(mel)
@@ -548,9 +559,9 @@ class Whisper(tf.keras.Model):
     #     return next(self.parameters()).device
 
     # highkey what is going on here?????
-    @property
-    def device(self):
-        return next(self.parameters()).device
+    # @property
+    # def device(self):
+    #     return next(self.parameters()).device
 
     # @property
     # def is_multilingual(self):
