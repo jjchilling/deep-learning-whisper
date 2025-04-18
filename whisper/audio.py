@@ -6,9 +6,6 @@ from typing import Optional, Union
 import librosa
 import matplotlib.pyplot as plt
 
-import whisper
-print(whisper.__file__)
-
 
 import numpy as np
 import tensorflow as tf
