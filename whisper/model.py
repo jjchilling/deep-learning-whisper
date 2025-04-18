@@ -10,6 +10,7 @@ import tensorflow as tf
 # import torch.nn.functional as F
 # from torch import Tensor, nn
 
+from whisper.decoder import decode as decode_function
 #from .decoding import decode as decode_function
 from .decoding import detect_language as detect_language_function
 from decoder import greedy_decode as decode_function
@@ -301,6 +302,7 @@ class ResidualAttentionBlock(tf.keras.layers.Layer):
         mask: Optional[tf.Tensor] = None,
         kv_cache: Optional[dict] = None,
     ):
+        
         x = x + self.attn(self.attn_ln(x), mask=mask, kv_cache=kv_cache)
         if self.cross_attn is not None:
             x = x + self.cross_attn(self.cross_attn_ln(x), xa, kv_cache=kv_cache)
@@ -388,6 +390,7 @@ class TextDecoder(tf.keras.layers.Layer):
 
 #         mask = torch.empty(n_ctx, n_ctx).fill_(-np.inf).triu_(1)
 #         self.register_buffer("mask", mask, persistent=False)
+
     def __init__(
         self, n_vocab: int, n_ctx: int, n_state: int, n_head: int, n_layer: int
     ):
@@ -642,6 +645,5 @@ class Whisper(tf.keras.Model):
         self.decoder.apply(install_hooks)
         return cache, hooks
 
-    detect_language = detect_language_function
     transcribe = transcribe_function
     decode = decode_function
