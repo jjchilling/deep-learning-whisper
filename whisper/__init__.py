@@ -6,12 +6,11 @@ import warnings
 from typing import List, Optional, Union
 
 from tqdm import tqdm
-
+import tensorflow as tf
 from .audio import load_audio, log_mel_spectrogram, pad_or_trim
 from .decoder import DecodingOptions, DecodingResult
 from .model import ModelDimensions, Whisper
 from .transcribe import transcribe
-from .version import __version__
 
 _MODELS = {
     "tiny.en": "https://openaipublic.azureedge.net/main/whisper/models/d3dd57d32accea0b295c96e26691aa14d8822fac7d9d27d5dc00b4ca2826dd03/tiny.en.pt",
@@ -101,7 +100,7 @@ def available_models() -> List[str]:
 
 def load_model(
     name: str,
-    device: Optional[Union[str, torch.device]] = None,
+    device: Optional[Union[str, tf.device]] = None,
     download_root: str = None,
     in_memory: bool = False,
 ) -> Whisper:
@@ -146,7 +145,7 @@ def load_model(
     with (
         io.BytesIO(checkpoint_file) if in_memory else open(checkpoint_file, "rb")
     ) as fp:
-        checkpoint = torch.load(fp, map_location="cpu")
+        checkpoint = tf.load(fp, map_location="cpu")
     del checkpoint_file
 
     dims = ModelDimensions(**checkpoint["dims"])
