@@ -5,7 +5,6 @@ import warnings
 from typing import TYPE_CHECKING, List, Optional, Tuple, Union
 
 import numpy as np
-import torch
 import tqdm
 import tensorflow as tf
 
@@ -38,7 +37,7 @@ if TYPE_CHECKING:
 
 def transcribe(
     model: "Whisper",
-    audio: Union[str, np.ndarray, torch.Tensor],
+    audio: Union[str, np.ndarray, tf.Tensor],
     *,
     verbose: Optional[bool] = None,
     temperature: Union[float, Tuple[float, ...]] = (0.0, 0.2, 0.4, 0.6, 0.8, 1.0),
@@ -183,7 +182,7 @@ def transcribe(
     if word_timestamps and task == "translate":
         warnings.warn("Word-level timestamps on translations may not be reliable.")
 
-    def decode_with_fallback(segment: torch.Tensor) -> DecodingResult:
+    def decode_with_fallback(segment: tf.Tensor) -> DecodingResult:
         temperatures = (
             [temperature] if isinstance(temperature, (int, float)) else temperature
         )
@@ -246,7 +245,7 @@ def transcribe(
         initial_prompt_tokens = []
 
     def new_segment(
-        *, start: float, end: float, tokens: torch.Tensor, result: DecodingResult
+        *, start: float, end: float, tokens: tf.Tensor, result: DecodingResult
     ):
         tokens = tokens.tolist()
         text_tokens = [token for token in tokens if token < tokenizer.eot]
@@ -295,7 +294,7 @@ def transcribe(
                 decode_options["prompt"] = all_tokens[prompt_reset_since:]
 
             result: DecodingResult = decode_with_fallback(mel_segment)
-            tokens = torch.tensor(result.tokens)
+            tokens = tf.tensor(result.tokens)
 
             if no_speech_threshold is not None:
                 # no voice activity check
@@ -338,10 +337,10 @@ def transcribe(
             def next_words_segment(segments: List[dict]) -> Optional[dict]:
                 return next((s for s in segments if s["words"]), None)
 
-            timestamp_tokens: torch.Tensor = tokens.ge(tokenizer.timestamp_begin)
+            timestamp_tokens: tf.Tensor = tokens.ge(tokenizer.timestamp_begin)
             single_timestamp_ending = timestamp_tokens[-2:].tolist() == [False, True]
 
-            consecutive = torch.where(timestamp_tokens[:-1] & timestamp_tokens[1:])[0]
+            consecutive = tf.where(timestamp_tokens[:-1] & timestamp_tokens[1:])[0]
             consecutive.add_(1)
             if len(consecutive) > 0:
                 # if the output contains two consecutive timestamp tokens
@@ -531,7 +530,7 @@ def cli():
     parser.add_argument("audio", nargs="+", type=str, help="audio file(s) to transcribe")
     parser.add_argument("--model", default="turbo", type=valid_model_name, help="name of the Whisper model to use")
     parser.add_argument("--model_dir", type=str, default=None, help="the path to save model files; uses ~/.cache/whisper by default")
-    parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu", help="device to use for PyTorch inference")
+    # parser.add_argument("--device", default="cuda" if tf.cuda.is_available() else "cpu", help="device to use for PyTorch inference")
     parser.add_argument("--output_dir", "-o", type=str, default=".", help="directory to save the outputs")
     parser.add_argument("--output_format", "-f", type=str, default="all", choices=["txt", "vtt", "srt", "tsv", "json", "all"], help="format of the output file; if not specified, all available formats will be produced")
     parser.add_argument("--verbose", type=str2bool, default=True, help="whether to print out the progress and debug messages")
@@ -589,8 +588,10 @@ def cli():
     else:
         temperature = [temperature]
 
-    if (threads := args.pop("threads")) > 0:
-        torch.set_num_threads(threads)
+    threads = args.pop("threads", None)
+    if threads is not None and threads > 0:
+        tf.config.threading.set_intra_op_parallelism_threads(threads)
+        tf.config.threading.set_inter_op_parallelism_threads(threads)
 
     from . import load_model
 
