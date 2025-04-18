@@ -298,6 +298,7 @@ class ResidualAttentionBlock(tf.keras.layers.Layer):
         mask: Optional[tf.Tensor] = None,
         kv_cache: Optional[dict] = None,
     ):
+        
         x = x + self.attn(self.attn_ln(x), mask=mask, kv_cache=kv_cache)
         if self.cross_attn is not None:
             x = x + self.cross_attn(self.cross_attn_ln(x), xa, kv_cache=kv_cache)
@@ -385,6 +386,7 @@ class TextDecoder(tf.keras.layers.Layer):
 
 #         mask = torch.empty(n_ctx, n_ctx).fill_(-np.inf).triu_(1)
 #         self.register_buffer("mask", mask, persistent=False)
+
     def __init__(
         self, n_vocab: int, n_ctx: int, n_state: int, n_head: int, n_layer: int
     ):
