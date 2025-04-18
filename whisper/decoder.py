@@ -116,7 +116,11 @@ class ApplyTimestampRules(LogitFilter):
                 )
         return logits
 
-    
+class DecodingResult:
+    def __init__(self, tokens, text):
+        self.tokens = tokens
+        self.text = text
+
 class DecodingTask:
     def __init__(self, encoder, decoder, tokenizer, options: DecodingOptions):
         self.encoder = encoder
@@ -125,7 +129,7 @@ class DecodingTask:
         self.options = options
         self.logit_filters = []
         self.sample_begin = 1
-        
+
         if options.use_timestamps:
             self.logit_filters.append(ApplyTimestampRules(tokenizer))
         if options.suppress_blank:
@@ -151,8 +155,8 @@ class DecodingTask:
         return tokens
 
     def run(self, mel):
-        mel = tf.expand_dims(mel, axis=0)  
-        mel = tf.transpose(mel, [0, 2, 1])  
+        mel = tf.expand_dims(mel, axis=0)
+        mel = tf.transpose(mel, [0, 2, 1])
         audio_features = self.encoder(mel)
         tokens = tf.constant([[self.tokenizer.sot]], dtype=tf.int32)
 
@@ -161,13 +165,19 @@ class DecodingTask:
         else:
             token_ids = self._main_loop(audio_features, tokens)
 
-        return self.tokenizer.decode(token_ids[0].numpy().tolist())
+        text = self.tokenizer.decode(token_ids[0].numpy().tolist())
+        return DecodingResult(token_ids[0], text)
 
 def transcribe_from_mel(mel, encoder, decoder, tokenizer, beam_size=None):
     options = DecodingOptions(beam_size=beam_size)
     task = DecodingTask(encoder, decoder, tokenizer, options)
     return task.run(mel)
 
+def decode(encoder, decoder, tokenizer, mel, options=DecodingOptions()):
+    if len(mel.shape) == 2:
+        mel = tf.expand_dims(mel, axis=0)
+    task = DecodingTask(encoder, decoder, tokenizer, options)
+    return task.run(mel)
 
 def greedy_decode(decoder, audio_features, tokenizer, apply_filters, max_len=128):
     tokens = tf.constant([[tokenizer.sot]], dtype=tf.int32)

@@ -17,7 +17,7 @@ from .audio import (
     log_mel_spectrogram,
     pad_or_trim,
 )
-from ..decoding import DecodingOptions, DecodingResult
+from whisper.decoder import DecodingOptions, DecodingResult
 from .timing import add_word_timestamps
 from .tokenizer import LANGUAGES, TO_LANGUAGE_CODE, get_tokenizer
 from .utils import (
