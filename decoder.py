@@ -55,7 +55,7 @@ class WhisperDecoder(tf.keras.Model):
 
     def call(self, tokens, audio_features, kv_cache=None):
         x = self.embedding(tokens)
-        batch_size, seq_len = tf.shape(tokens)[0], tf.shape(tokens)[1]
+        seq_len = tf.shape(tokens)[1]
         causal_mask = tf.linalg.band_part(tf.ones((seq_len, seq_len)), -1, 0)
         causal_mask = tf.reshape(causal_mask, [1, 1, seq_len, seq_len])
 
@@ -99,16 +99,23 @@ class ApplyTimestampRules(LogitFilter):
         self.timestamp_begin = timestamp_begin
 
     def apply(self, logits, tokens):
-        timestamp_logprob = tf.reduce_logsumexp(logits[:, self.timestamp_begin:], axis=-1)
-        max_text_logprob = tf.reduce_max(logits[:, :self.timestamp_begin], axis=-1)
-        select_timestamp = timestamp_logprob > max_text_logprob
+        seq = tokens.numpy().tolist()
+        last_token = seq[0][-1] if seq[0] else None
+        penultimate_token = seq[0][-2] if len(seq[0]) >= 2 else None
 
-        logits = tf.where(
-            tf.expand_dims(select_timestamp, axis=-1),
-            tf.concat([tf.fill(tf.shape(logits[:, :self.timestamp_begin]), -1e9), logits[:, self.timestamp_begin:]], axis=-1),
-            tf.concat([logits[:, :self.timestamp_begin], tf.fill(tf.shape(logits[:, self.timestamp_begin:]), -1e9)], axis=-1),
-        )
+        if last_token is not None and last_token >= self.timestamp_begin:
+            if penultimate_token is not None and penultimate_token >= self.timestamp_begin:
+                logits = tf.tensor_scatter_nd_update(
+                    logits, indices=[[i, j] for i in range(logits.shape[0]) for j in range(self.timestamp_begin, logits.shape[1])],
+                    updates=[-1e9] * logits.shape[0] * (logits.shape[1] - self.timestamp_begin)
+                )
+            else:
+                logits = tf.tensor_scatter_nd_update(
+                    logits, indices=[[i, j] for i in range(logits.shape[0]) for j in range(0, self.timestamp_begin)],
+                    updates=[-1e9] * logits.shape[0] * self.timestamp_begin
+                )
         return logits
+
     
 class DecodingTask:
     def __init__(self, encoder, decoder, tokenizer, options: DecodingOptions):
