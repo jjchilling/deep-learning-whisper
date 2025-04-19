@@ -119,7 +119,11 @@ def pad_or_trim(array, length: int = N_SAMPLES, *, axis: int = -1):
         if array.shape[axis] < length:
             pad_widths = [(0, 0)] * array.ndim
             pad_widths[axis] = (0, length - array.shape[axis])
-            array = np.pad(array, [pad for sizes in pad_widths[::-1] for pad in sizes])
+            print(f"shape of array= {array.shape} ")
+            print(f"length= {length} ")
+            print(f"pad widths shape= {pad_widths} ")
+            print(f"n samples= {N_SAMPLES} ")
+            array = tf.pad(array, pad_widths)
     else:
         if array.shape[axis] > length:
             array = array.take(indices=range(length), axis=axis)

@@ -150,8 +150,8 @@ def transcribe(
                 )
             mel_segment = pad_or_trim(mel, N_FRAMES)
             mel_segment = tf.cast(mel_segment, dtype)
-            _, probs = model.detect_language(mel_segment)
-            decode_options["language"] = max(probs, key=probs.get)
+            #_, probs = model.detect_language(mel_segment)
+            decode_options["language"] = "en"
             if verbose is not None:
                 print(
                     f"Detected language: {LANGUAGES[decode_options['language']].title()}"
@@ -194,6 +194,7 @@ def transcribe(
                 # disable beam_size and patience when t > 0
                 kwargs.pop("beam_size", None)
                 kwargs.pop("patience", None)
+
             else:
                 # disable best_of when t == 0
                 kwargs.pop("best_of", None)
@@ -284,7 +285,7 @@ def transcribe(
             segment_size = min(N_FRAMES, content_frames - seek, seek_clip_end - seek)
             mel_segment = mel[:, seek : seek + segment_size]
             segment_duration = segment_size * HOP_LENGTH / SAMPLE_RATE
-            mel_segment = pad_or_trim(mel_segment, N_FRAMES).to(model.device).to(dtype)
+            mel_segment = tf.cast(pad_or_trim(mel_segment, N_FRAMES), dtype=dtype)
 
             if carry_initial_prompt:
                 nignored = max(len(initial_prompt_tokens), prompt_reset_since)

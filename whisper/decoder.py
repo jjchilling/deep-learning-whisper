@@ -1,8 +1,9 @@
 import tensorflow as tf
 import numpy as np
 
+#added empty or unaccessed fields of lanugage, prompt
 class DecodingOptions:
-    def __init__(self, beam_size=None, temperature=0.0, max_len=128, suppress_blank=True, suppress_tokens="-1", use_timestamps=False, max_initial_timestamp=None):
+    def __init__(self, beam_size=None, temperature=0.0, max_len=128, language="en", prompt=None, suppress_blank=True, suppress_tokens="-1", use_timestamps=False, max_initial_timestamp=None):
         self.beam_size = beam_size
         self.temperature = temperature
         self.max_len = max_len
@@ -179,19 +180,19 @@ def decode(encoder, decoder, tokenizer, mel, options=DecodingOptions()):
     task = DecodingTask(encoder, decoder, tokenizer, options)
     return task.run(mel)
 
-def greedy_decode(decoder, audio_features, tokenizer, apply_filters, max_len=128):
+def greedy_decode(decoder, audio_features, tokenizer, max_len=128):
     tokens = tf.constant([[tokenizer.sot]], dtype=tf.int32)
     for _ in range(max_len):
         logits = decoder(tokens, audio_features)
         logits = logits[:, -1, :]
-        logits = apply_filters(logits, tokens)
+        logits = DecodingTask.apply_filters(logits, tokens)
         next_token = tf.argmax(logits, axis=-1, output_type=tf.int32)
         tokens = tf.concat([tokens, tf.expand_dims(next_token, axis=1)], axis=-1)
         if tf.reduce_all(tf.equal(next_token, tokenizer.eot)):
             break
     return tokens
 
-def beam_search_decode(decoder, audio_features, tokenizer, apply_filters, beam_size=5, max_len=128):
+def beam_search_decode(decoder, audio_features, tokenizer, beam_size=5, max_len=128):
     sequences = [(tf.constant([[tokenizer.sot]], dtype=tf.int32), 0.0)]
 
     for _ in range(max_len):
@@ -199,7 +200,7 @@ def beam_search_decode(decoder, audio_features, tokenizer, apply_filters, beam_s
         for tokens, score in sequences:
             logits = decoder(tokens, audio_features)
             logits = logits[:, -1, :]
-            logits = apply_filters(logits, tokens)
+            logits = DecodingTask.apply_filters(logits, tokens)
             log_probs = tf.nn.log_softmax(logits)
             topk_log_probs, topk_tokens = tf.math.top_k(log_probs, k=beam_size)
 
