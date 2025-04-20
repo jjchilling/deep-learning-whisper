@@ -310,9 +310,12 @@ class ResidualAttentionBlock(tf.keras.layers.Layer):
         kv_cache: Optional[dict] = None,
     ):
         
-        x = x + self.attn(self.attn_ln(x), mask=mask, kv_cache=kv_cache)
+        attn_out, _ = self.attn(self.attn_ln(x), mask=mask, kv_cache=kv_cache)
+        x = x + attn_out
         if self.cross_attn is not None:
-            x = x + self.cross_attn(self.cross_attn_ln(x), xa, kv_cache=kv_cache)
+            cross_attn_out, _ = self.cross_attn(self.cross_attn_ln(x), xa, kv_cache=kv_cache)
+            x = x + cross_attn_out
+
         x = x + self.mlp(self.mlp_ln(x))
         return x
 
