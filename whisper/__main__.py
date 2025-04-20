@@ -69,7 +69,8 @@ def train(model: Whisper, tokenizer: Tokenizer, dataset: tf.data.Dataset, epochs
             mel = tf.transpose(mel, [0, 2, 1]) 
 
             with tf.GradientTape() as tape:
-                audio_features = model.encoder(mel)  
+                audio_features = model.encoder(mel)
+
 
                 sot = tf.fill([tf.shape(target_tokens)[0], 1], tokenizer.sot) 
                 decoder_input = tf.concat([sot, target_tokens[:, :-1]], axis=1)  
@@ -78,6 +79,11 @@ def train(model: Whisper, tokenizer: Tokenizer, dataset: tf.data.Dataset, epochs
                 loss = loss_fn(target_tokens, logits)
 
             gradients = tape.gradient(loss, model.trainable_variables)
+            for v, g in zip(model.trainable_variables, gradients):
+                if g is None:
+                    print(f"No gradient for: {v.name}")
+                else:
+                    print(f"Gradient OK for: {v.name}")
             optimizer.apply_gradients(zip(gradients, model.trainable_variables))
 
             if step % 10 == 0:
