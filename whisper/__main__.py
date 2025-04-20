@@ -29,20 +29,33 @@ def load_dataset(data_dir, tokenizer, max_audio_len=3000):
 def split_dev_clean(dev_dir, split_ratio=0.8):
     """
     Split LibriSpeech dev-clean into training and validation sets.
+    Parses the centralized transcription file per folder.
+    Returns a list of (audio_path, transcription_text) pairs.
     """
     all_samples = []
+
     for root, _, files in os.walk(dev_dir):
-        for directory in files:
-            if directory.endswith(".flac") or directory.endswith(".wav"):
-                audio_path = os.path.join(root, directory)
-                text_path = audio_path.rsplit(".", 1)[0] + ".txt"
-                # if os.path.exists(text_path):
-                all_samples.append((audio_path, text_path))
+        trans_files = [f for f in files if f.endswith('.trans.txt')]
+        for trans_file in trans_files:
+            trans_path = os.path.join(root, trans_file)
+            
+            trans_dict = {}
+            with open(trans_path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    parts = line.strip().split(" ", 1)
+                    if len(parts) == 2:
+                        utt_id, transcription = parts
+                        trans_dict[utt_id] = transcription
+
+            for utt_id in trans_dict:
+                audio_file = utt_id + ".flac"
+                audio_path = os.path.join(root, audio_file)
+                if os.path.exists(audio_path):
+                    all_samples.append((audio_path, trans_dict[utt_id]))
 
     random.shuffle(all_samples)
-    
+
     split_idx = int(len(all_samples) * split_ratio)
-    print(all_samples)
     return all_samples[:split_idx], all_samples[split_idx:]
 
 def train(model: Whisper, tokenizer: Tokenizer, dataset: tf.data.Dataset, epochs: int = 5):
@@ -52,17 +65,23 @@ def train(model: Whisper, tokenizer: Tokenizer, dataset: tf.data.Dataset, epochs
     for epoch in range(epochs):
         print(f"Epoch {epoch+1}/{epochs}")
         for step, (mel, target_tokens) in enumerate(dataset):
+            mel = tf.transpose(mel, [0, 2, 1]) 
+
             with tf.GradientTape() as tape:
-                audio_features = model.encoder(tf.expand_dims(tf.transpose(mel), axis=0))
-                input_tokens = tf.expand_dims(tf.constant([tokenizer.sot] + target_tokens[:-1]), axis=0)
-                target_tokens = tf.expand_dims(target_tokens, axis=0)
-                logits = model.decoder(input_tokens, audio_features)
+                audio_features = model.encoder(mel)  
+
+                sot = tf.fill([tf.shape(target_tokens)[0], 1], tokenizer.sot) 
+                decoder_input = tf.concat([sot, target_tokens[:, :-1]], axis=1)  
+
+                logits = model.decoder(decoder_input, audio_features)  
                 loss = loss_fn(target_tokens, logits)
 
             gradients = tape.gradient(loss, model.trainable_variables)
             optimizer.apply_gradients(zip(gradients, model.trainable_variables))
+
             if step % 10 == 0:
                 print(f"Step {step}: Loss = {loss.numpy():.4f}")
+
 
 def test(model: Whisper, tokenizer: Tokenizer, test_dir: str):
     print("Testing on directory:", test_dir)
@@ -87,15 +106,14 @@ def main():
         n_audio_state=384,
         n_audio_head=6,
         n_audio_layer=4,
-        n_vocab=51864,
+        n_vocab=100262,
         n_text_ctx=448,
         n_text_state=384,
         n_text_head=6,
         n_text_layer=4
     )
     model = Whisper(dims)
-
-    tokenizer = get_tokenizer(multilingual=False)
+    tokenizer = tokenizer = get_tokenizer(multilingual=False,num_languages=1,language=None,task=None)
 
 
     print("Splitting dev-clean dataset...")
@@ -103,9 +121,7 @@ def main():
 
     print("Loading training data from dev-clean split...")
     train_dataset = []
-    for audio_path, text_path in train_split:
-        with open(text_path, 'r') as f:
-            transcription = f.read().strip()
+    for audio_path, transcription in train_split:
         audio = load_audio(audio_path)
         mel = log_mel_spectrogram(pad_or_trim(audio))
         tokens = tokenizer.encode(transcription)
@@ -113,7 +129,8 @@ def main():
 
     def gen():
         for mel, tokens in train_dataset:
-            yield mel, tokens
+            mel_fixed = pad_or_trim(mel, length=3000, axis=-1)
+            yield mel_fixed, tokens
 
     train_dataset_tf = tf.data.Dataset.from_generator(
         gen,
@@ -123,22 +140,21 @@ def main():
         )
     ).padded_batch(1)
 
+    print("Starting training...")
     train(model, tokenizer, train_dataset_tf, epochs=5)
 
     print("Running evaluation on validation split...")
-    test(model, tokenizer, val_split)
-    # for audio_path, text_path in val_split:
-    #     with open(text_path, 'r') as f:
-    #         reference = f.read().strip()
-    #     audio = load_audio(audio_path)
-    #     mel = log_mel_spectrogram(pad_or_trim(audio))
-    #     mel_tensor = tf.expand_dims(mel, axis=0)
-    #     mel_tensor = tf.transpose(mel_tensor, [0, 2, 1])
+    for audio_path, transcription in val_split:
+        audio = load_audio(audio_path)
+        mel = log_mel_spectrogram(pad_or_trim(audio))
+        mel_tensor = tf.expand_dims(mel, axis=0)  # (1, 80, 3000)
+        mel_tensor = tf.transpose(mel_tensor, [0, 2, 1])  # (1, 3000, 80) for encoder
 
-    #     options = DecodingOptions()
-    #     result = decode(model.encoder, model.decoder, tokenizer, mel_tensor, options)
-    #     print(f"Predicted: {result.text}")
-    #     print(f"Reference: {reference}\n")
+        options = DecodingOptions()
+        result = decode(model.encoder, model.decoder, tokenizer, mel_tensor, options)
+
+        print(f"Predicted: {result.text}")
+        print(f"Reference: {transcription}\n")
 
 if __name__ == "__main__":
     main()
