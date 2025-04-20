@@ -12,8 +12,7 @@ import tensorflow as tf
 
 from whisper.decoder import decode as decode_function
 #from .decoding import decode as decode_function
-from .decoding import detect_language as detect_language_function
-from decoder import greedy_decode as decode_function
+from whisper.decoder import greedy_decode as decode_function
 
 from .transcribe import transcribe as transcribe_function
 
@@ -270,10 +269,10 @@ class ResidualAttentionBlock(tf.keras.layers.Layer):
         super().__init__()
 
         self.attn = MultiHeadAttention(n_state, n_head)
-        self.attn_ln = LayerNorm(n_state)
+        self.attn_ln = LayerNorm(axis=-1)
 
         self.cross_attn = MultiHeadAttention(n_state, n_head) if cross_attention else None
-        self.cross_attn_ln = LayerNorm(n_state) if cross_attention else None
+        self.cross_attn_ln = LayerNorm(axis=-1) if cross_attention else None
 
         n_mlp = n_state * 4
         self.mlp = tf.keras.Sequential([
@@ -281,7 +280,7 @@ class ResidualAttentionBlock(tf.keras.layers.Layer):
             tf.keras.layers.Activation('gelu'), 
             Linear(n_state)
         ])
-        self.mlp_ln = LayerNorm(n_state)
+        self.mlp_ln = LayerNorm(axis=-1)
 
 #     def forward(
 #         self,
@@ -332,7 +331,7 @@ class AudioEncoder(tf.keras.layers.Layer):
         self.positional_embeding = sinusoids(n_ctx, n_state)
 
         self.blocks = [ResidualAttentionBlock(n_state, n_head) for _ in range(n_layer)]
-        self.ln_post = LayerNorm(n_state)
+        self.ln_post = LayerNorm(axis=-1)
 
 #     def forward(self, x: Tensor):
 #         """
@@ -358,10 +357,12 @@ class AudioEncoder(tf.keras.layers.Layer):
         """
         x = tf.nn.gelu(self.conv1(x))
         x = tf.nn.gelu(self.conv2(x))
-        x = tf.transpose(x, [0,2,1])
 
-        assert x.shape[1:] == self.positional_embedding.shape, "incorrect audio shape"
-        x = tf.cast((x + self.positional_embedding), x.dtype)
+        seq_len = tf.shape(x)[1]
+        pos_emb = self.positional_embeding[:seq_len, :] 
+        pos_emb = tf.expand_dims(pos_emb, axis=0)        
+        x = tf.cast(x + pos_emb, x.dtype)
+
 
         for block in self.blocks:
             x = block(x)
@@ -407,7 +408,7 @@ class TextDecoder(tf.keras.layers.Layer):
                 ResidualAttentionBlock(n_state, n_head, cross_attention=True)
                 for _ in range(n_layer)
             ]
-        self.ln = LayerNorm(n_state)
+        self.ln = LayerNorm(axis=-1)
 
         # this is super sus highkey
         inf_fill = tf.fill((n_ctx, n_ctx), -np.inf)

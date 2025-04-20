@@ -113,21 +113,17 @@ def log_mel_spectrogram(
 
 def pad_or_trim(array, length: int = N_SAMPLES, *, axis: int = -1):
     if tf.is_tensor(array):
-        if array.shape[axis] > length:
-            array = tf.gather(array, indices=tf.range(length), axis=axis)
+        array = array.numpy()
 
-        if array.shape[axis] < length:
-            pad_widths = [(0, 0)] * array.ndim
-            pad_widths[axis] = (0, length - array.shape[axis])
-            array = np.pad(array, [pad for sizes in pad_widths[::-1] for pad in sizes])
-    else:
-        if array.shape[axis] > length:
-            array = array.take(indices=range(length), axis=axis)
+    if array.shape[axis] > length:
+        slices = [slice(None)] * array.ndim
+        slices[axis] = slice(0, length)
+        array = array[tuple(slices)]
 
-        if array.shape[axis] < length:
-            pad_widths = [(0, 0)] * array.ndim
-            pad_widths[axis] = (0, length - array.shape[axis])
-            array = np.pad(array, pad_widths)
+    elif array.shape[axis] < length:
+        pad_widths = [(0, 0)] * array.ndim
+        pad_widths[axis] = (0, length - array.shape[axis])
+        array = np.pad(array, pad_widths)
 
     return array
 
