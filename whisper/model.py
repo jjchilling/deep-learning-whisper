@@ -245,6 +245,19 @@ class MultiHeadAttention(tf.keras.layers.Layer):
 
         return out, qk
 
+class MLP(tf.keras.layers.Layer):
+    def __init__(self, n_state):
+        super().__init__()
+        self.dense1 = Linear(n_state * 4)
+        self.gelu = tf.keras.layers.Activation('gelu')
+        self.dense2 = Linear(n_state)
+
+    def call(self, x):
+        x = self.dense1(x)
+        x = self.gelu(x)
+        x = self.dense2(x)
+        return x
+
 
 # class ResidualAttentionBlock(nn.Module):
 class ResidualAttentionBlock(tf.keras.layers.Layer):
@@ -274,12 +287,7 @@ class ResidualAttentionBlock(tf.keras.layers.Layer):
         self.cross_attn = MultiHeadAttention(n_state, n_head) if cross_attention else None
         self.cross_attn_ln = LayerNorm(axis=-1) if cross_attention else None
 
-        n_mlp = n_state * 4
-        self.mlp = tf.keras.Sequential([
-            Linear(n_mlp), 
-            tf.keras.layers.Activation('gelu'), 
-            Linear(n_state)
-        ])
+        self.mlp = self.mlp = MLP(n_state)
         self.mlp_ln = LayerNorm(axis=-1)
 
 #     def forward(
