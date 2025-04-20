@@ -376,7 +376,6 @@ class AudioEncoder(tf.keras.layers.Layer):
         pos_emb = tf.expand_dims(pos_emb, axis=0)        
         x = tf.cast(x + pos_emb, x.dtype)
 
-
         for block in self.blocks:
             x = block(x)
 

@@ -6,6 +6,7 @@ from whisper.tokenizer import Tokenizer
 from whisper.audio import process_all_audio_files, load_audio, log_mel_spectrogram, pad_or_trim
 from whisper.decoder import decode, DecodingOptions
 from whisper.tokenizer import get_tokenizer
+from tqdm import tqdm
 
 def load_dataset(data_dir, tokenizer, max_audio_len=3000):
     """
@@ -65,29 +66,33 @@ def train(model: Whisper, tokenizer: Tokenizer, dataset: tf.data.Dataset, epochs
 
     for epoch in range(epochs):
         print(f"Epoch {epoch+1}/{epochs}")
+        if epoch == 5:
+            return
+        progbar = tqdm(dataset, desc="Training", unit="batch")
         for step, (mel, target_tokens) in enumerate(dataset):
             mel = tf.transpose(mel, [0, 2, 1]) 
 
             with tf.GradientTape() as tape:
                 audio_features = model.encoder(mel)
 
-
                 sot = tf.fill([tf.shape(target_tokens)[0], 1], tokenizer.sot) 
                 decoder_input = tf.concat([sot, target_tokens[:, :-1]], axis=1)  
 
                 logits = model.decoder(decoder_input, audio_features)  
                 loss = loss_fn(target_tokens, logits)
-
+            
             gradients = tape.gradient(loss, model.trainable_variables)
             for v, g in zip(model.trainable_variables, gradients):
                 if g is None:
                     print(f"No gradient for: {v.name}")
-                else:
-                    print(f"Gradient OK for: {v.name}")
+                # else:
+                #     print(f"Gradient OK for: {v.name}")
             optimizer.apply_gradients(zip(gradients, model.trainable_variables))
+            progbar.set_postfix(loss=loss.numpy())
 
             if step % 10 == 0:
-                print(f"Step {step}: Loss = {loss.numpy():.4f}")
+                # print(f"Step {step}: Loss = {loss.numpy():.4f}")
+                tqdm.write(f"Step {step}: Loss = {loss:.4f}")
 
 
 def test(model: Whisper, tokenizer: Tokenizer, test_dir: str):
@@ -124,7 +129,7 @@ def main():
 
 
     print("Splitting dev-clean dataset...")
-    train_split, val_split = split_dev_clean("/Users/julie_chung/Downloads/LibriSpeech/dev-clean")
+    train_split, val_split = split_dev_clean("/Users/julie_chung/Desktop/sample")
     print("Loading training data from dev-clean split...")
     train_dataset = []
     for audio_path, transcription in train_split:
@@ -148,6 +153,7 @@ def main():
 
     print("Starting training...")
     train(model, tokenizer, train_dataset_tf, epochs=5)
+    model.save_weights("trained_whisper_model.weights.h5")
 
     print("Running evaluation on validation split...")
     for audio_path, transcription in val_split:
@@ -162,6 +168,8 @@ def main():
 
         print(f"Predicted: {result.text}")
         print(f"Reference: {transcription}\n")
+
+    model.save_weights("trained_whisper_model")
 
 if __name__ == "__main__":
     main()

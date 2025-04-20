@@ -5,6 +5,7 @@ from subprocess import CalledProcessError, run
 from typing import Optional, Union
 import librosa
 import matplotlib.pyplot as plt
+import pickle
 
 
 import numpy as np
@@ -13,6 +14,8 @@ import tensorflow as tf
 from .utils import exact_div
 from .tokenizer import get_tokenizer 
 
+MEL_SAVE_DIR="mel/"
+MEL_CACHE_PATH = os.path.join(MEL_SAVE_DIR, "mel_cache.pkl")
 
 SAMPLE_RATE = 16000
 N_FFT = 400
@@ -149,8 +152,15 @@ def process_all_audio_files(audio_dir: str = AUDIO_DIR, ext: str = EXT):
             mels[file] = mel
         except Exception as e:
             print(f"Error processing {file}: {e}")
+    with open(MEL_CACHE_PATH, 'wb') as f:
+        pickle.dump(mels, f)
 
     return mels
 
-mel = process_all_audio_files()
+def load_cached_mels(path: str = MEL_CACHE_PATH):
+    with open(path, 'rb') as f:
+        mels = pickle.load(f)
+    return mels
+
+mel = load_cached_mels if MEL_CACHE_PATH != None else process_all_audio_files()
 
