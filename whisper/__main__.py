@@ -56,6 +56,7 @@ def split_dev_clean(dev_dir, split_ratio=0.8):
     random.shuffle(all_samples)
 
     split_idx = int(len(all_samples) * split_ratio)
+    
     return all_samples[:split_idx], all_samples[split_idx:]
 
 def train(model: Whisper, tokenizer: Tokenizer, dataset: tf.data.Dataset, epochs: int = 5):
@@ -118,7 +119,7 @@ def main():
 
     print("Splitting dev-clean dataset...")
     train_split, val_split = split_dev_clean("/Users/robertogonzales/Desktop/DL/WhisperData/librispeech/dev-clean")
-
+    print(train_dataset, val_split)
     print("Loading training data from dev-clean split...")
     train_dataset = []
     for audio_path, transcription in train_split:
@@ -145,6 +146,7 @@ def main():
 
     print("Running evaluation on validation split...")
     for audio_path, transcription in val_split:
+        print("audio: ", audio_path, "transcription: ", transcription)
         audio = load_audio(audio_path)
         mel = log_mel_spectrogram(pad_or_trim(audio))
         mel_tensor = tf.expand_dims(mel, axis=0)  # (1, 80, 3000)

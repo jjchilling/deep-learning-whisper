@@ -130,6 +130,8 @@ class DecodingTask:
         self.logit_filters = []
         self.sample_begin = 1
 
+        print("time to decode")
+
         if options.use_timestamps:
             self.logit_filters.append(ApplyTimestampRules(tokenizer))
         if options.suppress_blank:
@@ -176,6 +178,7 @@ def transcribe_from_mel(mel, encoder, decoder, tokenizer, beam_size=None):
 def decode(encoder, decoder, tokenizer, mel, options=DecodingOptions()):
     if len(mel.shape) == 2:
         mel = tf.expand_dims(mel, axis=0)
+        print("expanded dimensions")
     task = DecodingTask(encoder, decoder, tokenizer, options)
     return task.run(mel)
 
