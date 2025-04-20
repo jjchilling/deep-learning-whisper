@@ -315,6 +315,17 @@ class ResidualAttentionBlock(tf.keras.layers.Layer):
             x = x + self.cross_attn(self.cross_attn_ln(x), xa, kv_cache=kv_cache)
         x = x + self.mlp(self.mlp_ln(x))
         return x
+    
+    def call(self, x, cross_input=None, mask=None, training=False):
+        attn_out = x + self.attn(self.attn_ln(x), mask=mask, training=training)
+        if self.cross_attn is not None and cross_input is not None:
+            attn_out = self.cross_attn_ln(
+                attn_out + self.cross_attn(attn_out, cross_input, cross_input, mask=mask, training=training)
+            )
+        output = self.mlp_ln(attn_out + self.mlp(attn_out, training=training))
+        return output
+    
+    
 
 # class AudioEncoder(nn.Module):
 class AudioEncoder(tf.keras.layers.Layer):

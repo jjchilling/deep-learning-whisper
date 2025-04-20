@@ -118,8 +118,7 @@ def main():
 
 
     print("Splitting dev-clean dataset...")
-    train_split, val_split = split_dev_clean("/Users/robertogonzales/Desktop/DL/WhisperData/librispeech/dev-clean")
-    print(train_dataset, val_split)
+    train_split, val_split = split_dev_clean("/Users/julie_chung/Downloads/LibriSpeech/dev-clean")
     print("Loading training data from dev-clean split...")
     train_dataset = []
     for audio_path, transcription in train_split:
