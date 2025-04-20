@@ -112,7 +112,7 @@ class Tokenizer:
 
     @cached_property
     def timestamp_begin(self) -> int:
-        return self.special_tokens["<|0.00|>"]
+        return self.special_tokens.get("<|0.00|>", float("inf"))
 
     @cached_property
     def language_token(self) -> int:

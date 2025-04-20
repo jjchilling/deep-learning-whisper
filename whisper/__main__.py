@@ -129,7 +129,7 @@ def main():
 
 
     print("Splitting dev-clean dataset...")
-    train_split, val_split = split_dev_clean("/Users/julie_chung/Desktop/sample")
+    train_split, val_split = split_dev_clean("/Users/robertogonzales/Desktop/DL/WhisperData/sample")
     print("Loading training data from dev-clean split...")
     train_dataset = []
     for audio_path, transcription in train_split:
@@ -159,7 +159,7 @@ def main():
     for audio_path, transcription in val_split:
         print("audio: ", audio_path, "transcription: ", transcription)
         audio = load_audio(audio_path)
-        mel = log_mel_spectrogram(pad_or_trim(audio))
+        mel = log_mel_spectrogram(pad_or_trim(audio, length=3000, axis=-1))
         mel_tensor = tf.expand_dims(mel, axis=0)  # (1, 80, 3000)
         mel_tensor = tf.transpose(mel_tensor, [0, 2, 1])  # (1, 3000, 80) for encoder
 

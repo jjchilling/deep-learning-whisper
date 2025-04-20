@@ -75,11 +75,11 @@ class SuppressBlank(LogitFilter):
         self.sample_begin = sample_begin
 
     def apply(self, logits, tokens):
-        if tf.shape(tokens)[1] == self.sample_begin:
-            for s in self.tokenizer.encode(" ") + [self.tokenizer.eot]:
-                logits = tf.tensor_scatter_nd_update(
-                    logits, indices=[[i, s] for i in range(tf.shape(logits)[0])], updates=[-1e9] * tf.shape(logits)[0]
-                )
+        # if tf.shape(tokens)[1] == self.sample_begin:
+        #     for s in self.tokenizer.encode(" ") + [self.tokenizer.eot]:
+        #         logits = tf.tensor_scatter_nd_update(
+        #             logits, indices=[[i, s] for i in range(tf.shape(logits)[0])], updates=[-1e9] * tf.shape(logits)[0]
+        #         )
         return logits
 
 class SuppressTokens(LogitFilter):
@@ -87,10 +87,10 @@ class SuppressTokens(LogitFilter):
         self.suppress_tokens = list(suppress_tokens)
 
     def apply(self, logits, tokens):
-        for s in self.suppress_tokens:
-            logits = tf.tensor_scatter_nd_update(
-                logits, indices=[[i, s] for i in range(tf.shape(logits)[0])], updates=[-1e9] * tf.shape(logits)[0]
-            )
+        # for s in self.suppress_tokens:
+        #     logits = tf.tensor_scatter_nd_update(
+        #         logits, indices=[[i, s] for i in range(tf.shape(logits)[0])], updates=[-1e9] * tf.shape(logits)[0]
+        #     )
         return logits
 
 class ApplyTimestampRules(LogitFilter):
@@ -132,13 +132,13 @@ class DecodingTask:
 
         print("time to decode")
 
-        if options.use_timestamps:
-            self.logit_filters.append(ApplyTimestampRules(tokenizer))
-        if options.suppress_blank:
-            self.logit_filters.append(SuppressBlank(tokenizer, self.sample_begin))
-        if options.suppress_tokens:
-            suppress = tokenizer.non_speech_tokens if options.suppress_tokens == "-1" else list(map(int, options.suppress_tokens.split(",")))
-            self.logit_filters.append(SuppressTokens(suppress))
+        # if options.use_timestamps:
+        #     self.logit_filters.append(ApplyTimestampRules(tokenizer))
+        # if options.suppress_blank:
+        #     self.logit_filters.append(SuppressBlank(tokenizer, self.sample_begin))
+        # if options.suppress_tokens:
+        #     suppress = tokenizer.non_speech_tokens if options.suppress_tokens == "-1" else list(map(int, options.suppress_tokens.split(",")))
+        #     self.logit_filters.append(SuppressTokens(suppress))
 
     def apply_filters(self, logits, tokens):
         for filt in self.logit_filters:
@@ -157,8 +157,8 @@ class DecodingTask:
         return tokens
 
     def run(self, mel):
-        mel = tf.expand_dims(mel, axis=0)
-        mel = tf.transpose(mel, [0, 2, 1])
+        if len(mel.shape) == 2:
+            mel = tf.expand_dims(mel, axis=0)
         audio_features = self.encoder(mel)
         tokens = tf.constant([[self.tokenizer.sot]], dtype=tf.int32)
 
