@@ -236,7 +236,7 @@ class MultiHeadAttention(tf.keras.layers.Layer):
 
         if mask is not None:
             qk = qk + mask[:n_ctx, :n_ctx]
-        qk = qk.float()
+        # qk = qk.float()
 
         w = tf.cast(tf.nn.softmax(qk, axis=-1), q.dtype)
         wv = tf.matmul(w,v)
@@ -302,7 +302,7 @@ class ResidualAttentionBlock(tf.keras.layers.Layer):
 #             x = x + self.cross_attn(self.cross_attn_ln(x), xa, kv_cache=kv_cache)[0]
 #         x = x + self.mlp(self.mlp_ln(x))
 #         return x
-    def forward(
+    def call(
         self,
         x: tf.Tensor,
         xa: Optional[tf.Tensor] = None,
@@ -318,15 +318,6 @@ class ResidualAttentionBlock(tf.keras.layers.Layer):
 
         x = x + self.mlp(self.mlp_ln(x))
         return x
-    
-    def call(self, x, cross_input=None, mask=None, training=False):
-        attn_out = x + self.attn(self.attn_ln(x), mask=mask, training=training)
-        if self.cross_attn is not None and cross_input is not None:
-            attn_out = self.cross_attn_ln(
-                attn_out + self.cross_attn(attn_out, cross_input, cross_input, mask=mask, training=training)
-            )
-        output = self.mlp_ln(attn_out + self.mlp(attn_out, training=training))
-        return output
     
     
 
