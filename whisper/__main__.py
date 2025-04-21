@@ -61,7 +61,7 @@ def split_dev_clean(dev_dir, split_ratio=0.8):
     return all_samples[:split_idx], all_samples[split_idx:]
 
 def train(model: Whisper, tokenizer: Tokenizer, dataset: tf.data.Dataset, epochs: int = 5):
-    optimizer = tf.keras.optimizers.Adam(learning_rate=1e-4)
+    optimizer = tf.keras.optimizers.legacy.Adam(learning_rate=5*1e-4)
     loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
 
     for epoch in range(epochs):
@@ -95,22 +95,6 @@ def train(model: Whisper, tokenizer: Tokenizer, dataset: tf.data.Dataset, epochs
                 tqdm.write(f"Step {step}: Loss = {loss:.4f}")
 
 
-def test(model: Whisper, tokenizer: Tokenizer, test_dir: str):
-    print("Testing on directory:", test_dir)
-    for root, _, files in os.walk(test_dir):
-        for file in files:
-            if not file.endswith(".wav") and not file.endswith(".flac"):
-                continue
-            path = os.path.join(root, file)
-            audio = load_audio(path)
-            mel = log_mel_spectrogram(pad_or_trim(audio))
-            mel_tensor = tf.expand_dims(mel, axis=0)
-            mel_tensor = tf.transpose(mel_tensor, [0, 2, 1])
-
-            options = DecodingOptions()
-            result = decode(model.encoder, model.decoder, tokenizer, mel_tensor, options)
-            print(f"{file}: {result.text}")
-
 def main():
     dims = ModelDimensions(
         n_mels=80,
@@ -125,7 +109,7 @@ def main():
         n_text_layer=4
     )
     model = Whisper(dims)
-    tokenizer = tokenizer = get_tokenizer(multilingual=False,num_languages=1,language=None,task=None)
+    tokenizer = get_tokenizer()
 
 
     print("Splitting dev-clean dataset...")
@@ -156,6 +140,7 @@ def main():
     model.save_weights("trained_whisper_model.weights.h5")
 
     print("Running evaluation on validation split...")
+    print("Decode sot: ", tokenizer.decode([tokenizer.sot]))
     for audio_path, transcription in val_split:
         print("audio: ", audio_path, "transcription: ", transcription)
         audio = load_audio(audio_path)
@@ -164,10 +149,12 @@ def main():
         mel_tensor = tf.transpose(mel_tensor, [0, 2, 1])  # (1, 3000, 80) for encoder
 
         options = DecodingOptions()
-        result = decode(model.encoder, model.decoder, tokenizer, mel_tensor, options)
 
-        print(f"Predicted: {result.text}")
-        print(f"Reference: {transcription}\n")
+        result = decode(model.encoder, model.decoder, tokenizer, mel_tensor, options)
+        first_token = result.tokens.numpy()[0]
+        print("First token ID:", first_token)
+        print("First token decoded:", tokenizer.decode([first_token]))
+        print(f"Predicted: {result.text}\n")
 
     model.save_weights("trained_whisper_model")
 

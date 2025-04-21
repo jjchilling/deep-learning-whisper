@@ -32,7 +32,7 @@ AUDIO_DIR = "audio/"
 EXT = "*.flac"        
 MEL_SAVE_DIR = "mel/"
 
-tokenizer = get_tokenizer(multilingual=True)
+tokenizer = get_tokenizer()
 task_token = 50358  
 sot_token = 50257
 no_ts_token = 50362

@@ -69,28 +69,42 @@ class LogitFilter:
     def apply(self, logits, tokens):
         pass
 
+
 class SuppressBlank(LogitFilter):
     def __init__(self, tokenizer, sample_begin):
         self.tokenizer = tokenizer
         self.sample_begin = sample_begin
 
     def apply(self, logits, tokens):
-        # if tf.shape(tokens)[1] == self.sample_begin:
-        #     for s in self.tokenizer.encode(" ") + [self.tokenizer.eot]:
-        #         logits = tf.tensor_scatter_nd_update(
-        #             logits, indices=[[i, s] for i in range(tf.shape(logits)[0])], updates=[-1e9] * tf.shape(logits)[0]
-        #         )
+        def suppress_logits(logits, suppressed_ids):
+            batch_size = tf.shape(logits)[0]
+            indices = tf.stack([
+                tf.repeat(tf.range(batch_size), len(suppressed_ids)),
+                tf.tile(tf.constant(suppressed_ids, dtype=tf.int32), [batch_size])
+            ], axis=1)
+            updates = tf.fill([batch_size * len(suppressed_ids)], -1e9)
+            return tf.tensor_scatter_nd_update(logits, indices, updates)
+
+        if tf.shape(tokens)[1] == self.sample_begin:
+            logits = suppress_logits(logits, [self.tokenizer.eot])
         return logits
+
 
 class SuppressTokens(LogitFilter):
     def __init__(self, suppress_tokens):
         self.suppress_tokens = list(suppress_tokens)
 
     def apply(self, logits, tokens):
-        # for s in self.suppress_tokens:
-        #     logits = tf.tensor_scatter_nd_update(
-        #         logits, indices=[[i, s] for i in range(tf.shape(logits)[0])], updates=[-1e9] * tf.shape(logits)[0]
-        #     )
+        def suppress_logits(logits, suppressed_ids):
+            batch_size = tf.shape(logits)[0]
+            indices = tf.stack([
+                tf.repeat(tf.range(batch_size), len(suppressed_ids)),
+                tf.tile(tf.constant(suppressed_ids, dtype=tf.int32), [batch_size])
+            ], axis=1)
+            updates = tf.fill([batch_size * len(suppressed_ids)], -1e9)
+            return tf.tensor_scatter_nd_update(logits, indices, updates)
+
+        logits = suppress_logits(logits, self.suppress_tokens)
         return logits
 
 class ApplyTimestampRules(LogitFilter):
@@ -132,13 +146,13 @@ class DecodingTask:
 
         print("time to decode")
 
-        # if options.use_timestamps:
-        #     self.logit_filters.append(ApplyTimestampRules(tokenizer))
-        # if options.suppress_blank:
-        #     self.logit_filters.append(SuppressBlank(tokenizer, self.sample_begin))
-        # if options.suppress_tokens:
-        #     suppress = tokenizer.non_speech_tokens if options.suppress_tokens == "-1" else list(map(int, options.suppress_tokens.split(",")))
-        #     self.logit_filters.append(SuppressTokens(suppress))
+        if options.use_timestamps:
+            self.logit_filters.append(ApplyTimestampRules(tokenizer))
+        if options.suppress_blank:
+            self.logit_filters.append(SuppressBlank(tokenizer, self.sample_begin))
+        if options.suppress_tokens:
+            suppress = tokenizer.non_speech_tokens if options.suppress_tokens == "-1" else list(map(int, options.suppress_tokens.split(",")))
+            self.logit_filters.append(SuppressTokens(suppress))
 
     def apply_filters(self, logits, tokens):
         for filt in self.logit_filters:
@@ -160,7 +174,7 @@ class DecodingTask:
         if len(mel.shape) == 2:
             mel = tf.expand_dims(mel, axis=0)
         audio_features = self.encoder(mel)
-        tokens = tf.constant([[self.tokenizer.sot]], dtype=tf.int32)
+        tokens = tf.constant([self.tokenizer.sot_sequence], dtype=tf.int32)
 
         if self.options.beam_size:
             token_ids = beam_search_decode(self.decoder, audio_features, self.tokenizer, self.apply_filters, beam_size=self.options.beam_size, max_len=self.options.max_len)
@@ -178,12 +192,11 @@ def transcribe_from_mel(mel, encoder, decoder, tokenizer, beam_size=None):
 def decode(encoder, decoder, tokenizer, mel, options=DecodingOptions()):
     if len(mel.shape) == 2:
         mel = tf.expand_dims(mel, axis=0)
-        print("expanded dimensions")
     task = DecodingTask(encoder, decoder, tokenizer, options)
     return task.run(mel)
 
 def greedy_decode(decoder, audio_features, tokenizer, apply_filters, max_len=128):
-    tokens = tf.constant([[tokenizer.sot]], dtype=tf.int32)
+    tokens = tf.constant([tokenizer.sot_sequence], dtype=tf.int32)
     for _ in range(max_len):
         logits = decoder(tokens, audio_features)
         logits = logits[:, -1, :]
@@ -195,7 +208,7 @@ def greedy_decode(decoder, audio_features, tokenizer, apply_filters, max_len=128
     return tokens
 
 def beam_search_decode(decoder, audio_features, tokenizer, apply_filters, beam_size=5, max_len=128):
-    sequences = [(tf.constant([[tokenizer.sot]], dtype=tf.int32), 0.0)]
+    sequences = [(tf.constant([[tokenizer.sot_sequence]], dtype=tf.int32), 0.0)]
 
     for _ in range(max_len):
         all_candidates = []
@@ -209,7 +222,7 @@ def beam_search_decode(decoder, audio_features, tokenizer, apply_filters, beam_s
             for i in range(beam_size):
                 new_token = topk_tokens[0, i]
                 new_score = score + float(topk_log_probs[0, i])
-                new_seq = tf.concat([tokens, tf.constant([[new_token]])], axis=-1)
+                new_seq = tf.concat([tokens, tf.expand_dims(tf.expand_dims(new_token, axis=0), axis=1)], axis=-1)
                 all_candidates.append((new_seq, new_score))
 
         ordered = sorted(all_candidates, key=lambda tup: tup[1], reverse=True)

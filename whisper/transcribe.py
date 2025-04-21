@@ -19,7 +19,7 @@ from .audio import (
 )
 from whisper.decoder import DecodingOptions, DecodingResult
 from .timing import add_word_timestamps
-from .tokenizer import LANGUAGES, TO_LANGUAGE_CODE, get_tokenizer
+from .tokenizer import get_tokenizer
 from .utils import (
     exact_div,
     format_timestamp,
@@ -154,7 +154,7 @@ def transcribe(
             decode_options["language"] = max(probs, key=probs.get)
             if verbose is not None:
                 print(
-                    f"Detected language: {LANGUAGES[decode_options['language']].title()}"
+                    # f"Detected language: {LANGUAGES[decode_options['language']].title()}"
                 )
 
     language: str = decode_options["language"]
@@ -295,6 +295,7 @@ def transcribe(
 
             result: DecodingResult = decode_with_fallback(mel_segment)
             tokens = tf.tensor(result.tokens)
+
 
             if no_speech_threshold is not None:
                 # no voice activity check
@@ -536,7 +537,7 @@ def cli():
     parser.add_argument("--verbose", type=str2bool, default=True, help="whether to print out the progress and debug messages")
 
     parser.add_argument("--task", type=str, default="transcribe", choices=["transcribe", "translate"], help="whether to perform X->X speech recognition ('transcribe') or X->English translation ('translate')")
-    parser.add_argument("--language", type=str, default=None, choices=sorted(LANGUAGES.keys()) + sorted([k.title() for k in TO_LANGUAGE_CODE.keys()]), help="language spoken in the audio, specify None to perform language detection")
+    # parser.add_argument("--language", type=str, default=None, choices=sorted(LANGUAGES.keys()) + sorted([k.title() for k in TO_LANGUAGE_CODE.keys()]), help="language spoken in the audio, specify None to perform language detection")
 
     parser.add_argument("--temperature", type=float, default=0, help="temperature to use for sampling")
     parser.add_argument("--best_of", type=optional_int, default=5, help="number of candidates when sampling with non-zero temperature")
