@@ -1,5 +1,6 @@
 import os
 import random
+import numpy as np
 import tensorflow as tf
 from whisper.model import Whisper, ModelDimensions
 from whisper.tokenizer import Tokenizer
@@ -113,7 +114,7 @@ def main():
 
 
     print("Splitting dev-clean dataset...")
-    train_split, val_split = split_dev_clean("/Users/robertogonzales/Desktop/DL/WhisperData/sample")
+    train_split, val_split = split_dev_clean("C:/Users/anant/Desktop/whisperdata/sample/121123")
     print("Loading training data from dev-clean split...")
     train_dataset = []
     for audio_path, transcription in train_split:
@@ -155,8 +156,36 @@ def main():
         print("First token ID:", first_token)
         print("First token decoded:", tokenizer.decode([first_token]))
         print(f"Predicted: {result.text}\n")
+        print(f"WER: {wer_func(transcription, result.text)}")
 
     model.save_weights("trained_whisper_model")
+
+def wer_func(ref, hyp):
+    ref = ref.split()
+    hyp = hyp.split()
+    len_r = len(ref)
+    len_h = len(hyp)
+
+    mat = np.zeros((len_r+1,len_h+1))
+
+    for i in range(len_r+1):
+        mat[i][0] = i
+    for j in range(len_h+1):
+        mat[0][j] = j
+
+    for i in range(1,len_r+1):
+        for j in range(1, len_h+1):
+            if ref[i-1]==hyp[j-1]:
+                mat[i][j] = mat[i-1][j-1]
+            else:
+                sub = mat[i-1, j-1] + 1
+                ins = mat[i,j-1] + 1
+                del_w = mat[i-1,j] + 1
+                mat[i,j] = min(sub,ins,del_w)
+    
+    return mat[len_r,len_h]/len_r
+
+
 
 if __name__ == "__main__":
     main()
