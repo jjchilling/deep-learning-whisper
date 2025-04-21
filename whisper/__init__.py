@@ -5,7 +5,7 @@ import urllib
 import warnings
 from typing import List, Optional, Union
 
-import torch
+#import torch
 from tqdm import tqdm
 
 from .audio import load_audio, log_mel_spectrogram, pad_or_trim
@@ -101,7 +101,7 @@ def available_models() -> List[str]:
 
 def load_model(
     name: str,
-    device: Optional[Union[str, torch.device]] = None,
+    device: Optional[Union[str, str]] = None,
     download_root: str = None,
     in_memory: bool = False,
 ) -> Whisper:
