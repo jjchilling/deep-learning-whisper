@@ -422,10 +422,15 @@ class TextDecoder(tf.keras.layers.Layer):
             the encoded audio features to be attended on
         """
         offset = next(iter(kv_cache.values())).shape[1] if kv_cache else 0
-        x = (
-            self.token_embedding(x)
-            + self.positional_embedding[offset : offset + tf.shape(x)[-1]]
-        )
+        #new trial below
+        seq_len = tf.shape(x)[-1]
+        positions = tf.range(offset, offset + seq_len)
+        pos_embed = tf.gather(self.positional_embedding, positions)
+        x = self.token_embedding(x) + pos_embed 
+        # x = (
+        #     self.token_embedding(x)
+        #     + self.positional_embedding[offset : offset + tf.shape(x)[-1]]
+        # )
         x = tf.cast(x, xa.dtype)
 
         for block in self.blocks:

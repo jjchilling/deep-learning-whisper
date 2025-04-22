@@ -74,7 +74,7 @@ def train(model: Whisper, tokenizer: Tokenizer, dataset: tf.data.Dataset, epochs
             mel = tf.transpose(mel, [0, 2, 1]) 
 
             with tf.GradientTape() as tape:
-                audio_features = model.encoder(mel)
+                audio_features = model.encoder(mel) #encoded spectrogram, conv1d and sinusoidal embedding
 
                 sot = tf.fill([tf.shape(target_tokens)[0], 1], tokenizer.sot) 
                 decoder_input = tf.concat([sot, target_tokens[:, :-1]], axis=1)  
@@ -114,7 +114,7 @@ def main():
 
 
     print("Splitting dev-clean dataset...")
-    train_split, val_split = split_dev_clean("/oscar/scratch/avzeng/dev-clean")
+    train_split, val_split = split_dev_clean("C:/Users/anant/Desktop/whisperdata/sample/121123")
     print("Loading training data from dev-clean split...")
     train_dataset = []
     for audio_path, transcription in train_split:
