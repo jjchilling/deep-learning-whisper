@@ -62,7 +62,7 @@ def split_dev_clean(dev_dir, split_ratio=0.8):
     return all_samples[:split_idx], all_samples[split_idx:]
 
 def train(model: Whisper, tokenizer: Tokenizer, dataset: tf.data.Dataset, epochs: int = 5):
-    optimizer = tf.keras.optimizers.legacy.Adam(learning_rate=5*1e-4)
+    optimizer = tf.keras.optimizers.Adam(learning_rate=5*1e-4)
     loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
 
     for epoch in range(epochs):
@@ -136,6 +136,9 @@ def main():
 
     print("Starting training...")
     train(model, tokenizer, train_dataset_tf, epochs=5)
+    dummy_mel = tf.zeros((1, 3000, 80))
+    dummy_tokens = tf.zeros((1, 10), dtype=tf.int32)
+    _ = model(dummy_mel, dummy_tokens)
     model.save_weights("trained_whisper_model.weights.h5")
 
     print("Running evaluation on validation split...")
@@ -156,7 +159,7 @@ def main():
         print(f"Predicted: {result.text}\n")
         print(f"WER: {wer_func(transcription, result.text)}")
 
-    model.save_weights("trained_whisper_model")
+    model.save_weights("trained_whisper_model.weights.h5")
 
 def wer_func(ref, hyp):
     ref = ref.split()

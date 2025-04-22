@@ -20,8 +20,14 @@ class TokenAndPositionEmbedding(tf.keras.layers.Layer):
         )
 
     def call(self, x):
-        max_len = tf.shape(x)[-1]
-        return self.token_emb(x) + self.pos_emb[:max_len]
+        tf.print("token and pos embedding input shape: ", tf.shape(x))
+        #trial below
+        pos = tf.range(tf.shape(x)[1])
+        pos_emb = tf.gather(self.pos_emb, pos)
+        return self.token_emb(x) + pos_emb
+
+        # max_len = tf.shape(x)[-1]
+        # return self.token_emb(x) + self.pos_emb[:max_len]
 
 def mlp_block(embed_dim):
     return tf.keras.Sequential([
@@ -41,6 +47,7 @@ class DecoderBlock(tf.keras.layers.Layer):
 
     def call(self, x, audio_features, causal_mask=None):
         x = x + self.self_attn(query=self.ln1(x), value=x, key=x, attention_mask=causal_mask)
+        tf.print("audio features shape:", tf.shape(audio_features))
         x = x + self.cross_attn(query=self.ln2(x), value=audio_features, key=audio_features)
         x = x + self.mlp(self.ln3(x))
         return x
@@ -54,6 +61,7 @@ class WhisperDecoder(tf.keras.Model):
         self.output_proj = tf.keras.layers.Dense(vocab_size)
 
     def call(self, tokens, audio_features, kv_cache=None):
+        tf.print("Entered WhisperDecoder.call")
         x = self.embedding(tokens)
         seq_len = tf.shape(tokens)[1]
         causal_mask = tf.linalg.band_part(tf.ones((seq_len, seq_len)), -1, 0)
