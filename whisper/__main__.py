@@ -74,12 +74,10 @@ def train(model: Whisper, tokenizer: Tokenizer, dataset: tf.data.Dataset, epochs
             mel = tf.transpose(mel, [0, 2, 1]) 
 
             with tf.GradientTape() as tape:
-                audio_features = model.encoder(mel) #encoded spectrogram, conv1d and sinusoidal embedding
-
                 sot = tf.fill([tf.shape(target_tokens)[0], 1], tokenizer.sot) 
                 decoder_input = tf.concat([sot, target_tokens[:, :-1]], axis=1)  
 
-                logits = model.decoder(decoder_input, audio_features)  
+                logits = model(mel, decoder_input)
                 loss = loss_fn(target_tokens, logits)
             
             gradients = tape.gradient(loss, model.trainable_variables)
@@ -134,7 +132,7 @@ def main():
             tf.TensorSpec(shape=(80, 3000), dtype=tf.float32),
             tf.TensorSpec(shape=(None,), dtype=tf.int32),
         )
-    ).padded_batch(1)
+    ).padded_batch(5)
 
     print("Starting training...")
     train(model, tokenizer, train_dataset_tf, epochs=5)
@@ -146,15 +144,14 @@ def main():
     print("Running evaluation on validation split...")
 
     print("Decode sot: ", tokenizer.decode([tokenizer.sot]))
-
-    for audio_path, transcription in val_split:
+    for audio_path, transcription in train_split:
         print("audio: ", audio_path, "transcription: ", transcription)
         audio = load_audio(audio_path)
         mel = log_mel_spectrogram(pad_or_trim(audio, length=3000, axis=-1))
         mel_tensor = tf.expand_dims(mel, axis=0)  # (1, 80, 3000)
         mel_tensor = tf.transpose(mel_tensor, [0, 2, 1])  # (1, 3000, 80) for encoder
 
-        options = DecodingOptions()
+        options = DecodingOptions(suppress_tokens="-1", suppress_blank=True, temperature=0.7)
 
         result = decode(model.encoder, model.decoder, tokenizer, mel_tensor, options)
         first_token = result.tokens.numpy()[0]

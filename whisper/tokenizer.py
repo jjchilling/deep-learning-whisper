@@ -22,7 +22,7 @@ class Tokenizer:
         sot = self.special_tokens["<|startoftranscript|>"]
         transcribe = self.special_tokens["<|transcribe|>"]
 
-        self.sot_sequence = (sot, transcribe)
+        self.sot_sequence = (sot,transcribe)
 
     def encode(self, text, **kwargs):
         return self.encoding.encode(text, **kwargs)

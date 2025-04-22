@@ -142,7 +142,16 @@ class DecodingResult:
     def __init__(self, tokens, text):
         self.tokens = tokens
         self.text = text
+# class RepetitionPenalty(LogitFilter):
+#     def __init__(self, penalty: float = 1.2):
+#         self.penalty = penalty
 
+#     def apply(self, logits: tf.Tensor, tokens: tf.Tensor) -> tf.Tensor:
+#         for b in range(logits.shape[0]):
+#             for t in tokens[b]:
+#                 logits = tf.tensor_scatter_nd_update(logits,[[b, t]],[logits[b, t] / self.penalty])
+#         return logits
+    
 class DecodingTask:
     def __init__(self, encoder, decoder, tokenizer, options: DecodingOptions):
         self.encoder = encoder
@@ -161,6 +170,7 @@ class DecodingTask:
         if options.suppress_tokens:
             suppress = tokenizer.non_speech_tokens if options.suppress_tokens == "-1" else list(map(int, options.suppress_tokens.split(",")))
             self.logit_filters.append(SuppressTokens(suppress))
+        # self.logit_filters.append(RepetitionPenalty(penalty=1.2))
 
     def apply_filters(self, logits, tokens):
         for filt in self.logit_filters:
@@ -203,40 +213,47 @@ def decode(encoder, decoder, tokenizer, mel, options=DecodingOptions()):
     task = DecodingTask(encoder, decoder, tokenizer, options)
     return task.run(mel)
 
-def greedy_decode(decoder, audio_features, tokenizer, apply_filters, max_len=128):
+def greedy_decode(decoder, audio_features, tokenizer, apply_filters, max_len=128, temperature=1.0):
     tokens = tf.constant([tokenizer.sot_sequence], dtype=tf.int32)
-    for _ in range(max_len):
+
+    for step in range(max_len):
         logits = decoder(tokens, audio_features)
         logits = logits[:, -1, :]
         logits = apply_filters(logits, tokens)
+        if temperature != 1.0:
+            logits = logits / temperature
         next_token = tf.argmax(logits, axis=-1, output_type=tf.int32)
         tokens = tf.concat([tokens, tf.expand_dims(next_token, axis=1)], axis=-1)
         if tf.reduce_all(tf.equal(next_token, tokenizer.eot)):
             break
     return tokens
 
-def beam_search_decode(decoder, audio_features, tokenizer, apply_filters, beam_size=5, max_len=128):
-    sequences = [(tf.constant([[tokenizer.sot_sequence]], dtype=tf.int32), 0.0)]
 
-    for _ in range(max_len):
+def beam_search_decode(decoder, audio_features, tokenizer, apply_filters, beam_size=5, max_len=128):
+    sequences = [(tf.constant([tokenizer.sot_sequence], dtype=tf.int32), 0.0)]
+
+    for step in range(max_len):
         all_candidates = []
+
         for tokens, score in sequences:
             logits = decoder(tokens, audio_features)
             logits = logits[:, -1, :]
             logits = apply_filters(logits, tokens)
             log_probs = tf.nn.log_softmax(logits)
+
             topk_log_probs, topk_tokens = tf.math.top_k(log_probs, k=beam_size)
 
             for i in range(beam_size):
-                new_token = topk_tokens[0, i]
-                new_score = score + float(topk_log_probs[0, i])
-                new_seq = tf.concat([tokens, tf.expand_dims(tf.expand_dims(new_token, axis=0), axis=1)], axis=-1)
-                all_candidates.append((new_seq, new_score))
+                next_token = topk_tokens[0, i]
+                next_score = score + float(topk_log_probs[0, i].numpy())
+                new_seq = tf.concat([tokens, tf.expand_dims(next_token, axis=0)], axis=0)  # shape (T+1,)
+                all_candidates.append((new_seq, next_score))
 
-        ordered = sorted(all_candidates, key=lambda tup: tup[1], reverse=True)
-        sequences = ordered[:beam_size]
+        sequences = sorted(all_candidates, key=lambda tup: tup[1], reverse=True)[:beam_size]
 
-        if all(tf.reduce_all(tf.equal(seq[0][0, -1], tokenizer.eot)) for seq in sequences):
+        if all(seq[-1].numpy() == tokenizer.eot for seq, _ in sequences):
             break
 
-    return sequences[:1][0][0]
+
+    return tf.expand_dims(sequences[0][0], axis=0)
+
