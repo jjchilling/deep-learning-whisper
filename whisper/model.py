@@ -342,7 +342,7 @@ class AudioEncoder(tf.keras.layers.Layer):
         self.conv1 = Conv1d(filters=n_state, kernel_size=3, strides=1, padding='same')
         self.conv2 = Conv1d(filters=n_state, kernel_size=3, strides=2, padding='same')
 
-        self.positional_embeding = sinusoids(n_ctx, n_state)
+        self.positional_embedding = sinusoids(n_ctx, n_state)
 
         self.blocks = [ResidualAttentionBlock(n_state, n_head) for _ in range(n_layer)]
         self.ln_post = LayerNorm(axis=-1)
@@ -372,7 +372,8 @@ class AudioEncoder(tf.keras.layers.Layer):
         x = tf.nn.gelu(self.conv1(x))
         x = tf.nn.gelu(self.conv2(x))
         seq_len = tf.shape(x)[1]
-        pos_emb = sinusoids(seq_len, tf.shape(x)[-1])  # Regenerate dynamically
+        pos_emb = self.positional_embedding[:seq_len]
+        x = x + tf.cast(pos_emb, x.dtype)
         x = x + tf.cast(pos_emb, x.dtype)
 
         for block in self.blocks:
@@ -402,15 +403,9 @@ class TextDecoder(tf.keras.layers.Layer):
         self.ln = LayerNorm(axis=-1)
 
         # this is super sus highkey
-        mask = 1.0 - tf.linalg.band_part(tf.ones((n_ctx, n_ctx)), -1, 0)
-        mask = tf.where(mask == 1, tf.constant(-1e9, dtype=tf.float32), tf.constant(0.0, dtype=tf.float32))
-
-        self.mask = self.add_weight(
-            shape=(n_ctx, n_ctx),
-            initializer=tf.constant_initializer(mask.numpy()),
-            trainable=False,
-            name="mask"
-        )
+        mask = 1.0 - tf.linalg.band_part(tf.ones((n_ctx, n_ctx)), -1, 0)  
+        mask = tf.where(mask == 1.0, tf.constant(-1e9, dtype=tf.float32), tf.constant(0.0, dtype=tf.float32))
+        self.causal_mask = tf.constant(mask, dtype=tf.float32)
 
 
 
@@ -422,17 +417,16 @@ class TextDecoder(tf.keras.layers.Layer):
             the encoded audio features to be attended on
         """
         offset = next(iter(kv_cache.values())).shape[1] if kv_cache else 0
-        x = (
-            self.token_embedding(x)
-            + self.positional_embedding[offset : offset + tf.shape(x)[-1]]
-        )
+        pos_embed_slice = self.positional_embedding[offset : offset + tf.shape(x)[-1]]
+        x = self.token_embedding(x) + pos_embed_slice
         x = tf.cast(x, xa.dtype)
 
         for block in self.blocks:
-            x = block(x, xa, mask=self.mask, kv_cache=kv_cache)
+            x = block(x, xa, mask=self.causal_mask, kv_cache=kv_cache)
 
         x = self.ln(x)
-        transpose_embedding = tf.transpose(tf.cast(self.token_embedding.weights[0], x.dtype), [1,0])
+
+        transpose_embedding = tf.transpose(tf.cast(self.token_embedding.weights[0], x.dtype), [1, 0])
         logits = tf.matmul(x, transpose_embedding)
         logits = tf.cast(logits, tf.float32)
 
