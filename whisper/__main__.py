@@ -114,7 +114,7 @@ def main():
 
 
     print("Splitting dev-clean dataset...")
-    train_split, val_split = split_dev_clean("C:/Users/anant/Desktop/whisperdata/sample/121123")
+    train_split, val_split = split_dev_clean("/Users/julie_chung/Desktop/sample")
     print("Loading training data from dev-clean split...")
     train_dataset = []
     for audio_path, transcription in train_split:
@@ -144,7 +144,9 @@ def main():
     model.save_weights("trained_whisper_model.weights.h5")
 
     print("Running evaluation on validation split...")
+
     print("Decode sot: ", tokenizer.decode([tokenizer.sot]))
+
     for audio_path, transcription in val_split:
         print("audio: ", audio_path, "transcription: ", transcription)
         audio = load_audio(audio_path)
