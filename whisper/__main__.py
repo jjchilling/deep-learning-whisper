@@ -63,6 +63,7 @@ def split_dev_clean(dev_dir, split_ratio=0.8):
 
 def train(model: Whisper, tokenizer: Tokenizer, dataset: tf.data.Dataset, epochs: int = 5):
     optimizer = tf.keras.optimizers.Adam(learning_rate=5*1e-4)
+    
     loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
 
     for epoch in range(epochs):
@@ -78,7 +79,14 @@ def train(model: Whisper, tokenizer: Tokenizer, dataset: tf.data.Dataset, epochs
                 decoder_input = tf.concat([sot, target_tokens[:, :-1]], axis=1)  
 
                 logits = model(mel, decoder_input)
-                loss = loss_fn(target_tokens, logits)
+
+                pad_token_id = tokenizer.special_tokens.get("pad", 0) # LOSS NOT CONTRIBUTE TO THE PREDICTION MASK :0
+
+                mask = tf.cast(tf.not_equal(target_tokens, pad_token_id), dtype=tf.float32)
+                
+                loss = loss_fn(target_tokens, logits, sample_weight=mask)
+                
+                # loss = loss_fn(target_tokens, logits)
             
             gradients = tape.gradient(loss, model.trainable_variables)
             for v, g in zip(model.trainable_variables, gradients):
@@ -135,11 +143,14 @@ def main():
     ).padded_batch(5)
 
     print("Starting training...")
+
+
     train(model, tokenizer, train_dataset_tf, epochs=5)
-    dummy_mel = tf.zeros((1, 3000, 80))
-    dummy_tokens = tf.zeros((1, 10), dtype=tf.int32)
-    _ = model(dummy_mel, dummy_tokens)
-    model.save_weights("trained_whisper_model.weights.h5")
+    # dummy_mel = tf.zeros((1, 3000, 80))
+    # dummy_tokens = tf.zeros((1, 10), dtype=tf.int32)
+    # _ = model(dummy_mel, dummy_tokens)
+
+    # model.save_weights("trained_whisper_model.weights.h5")
 
     print("Running evaluation on validation split...")
 
