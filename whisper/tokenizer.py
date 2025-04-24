@@ -116,6 +116,6 @@ def get_encoding(name: str = "gpt2"):
     )
 
 @lru_cache(maxsize=None)
-def get_tokenizer() -> Tokenizer:
-    encoding = get_encoding(name="gpt2")
+def get_tokenizer(name="gpt2") -> Tokenizer:
+    encoding = get_encoding(name=name)
     return Tokenizer(encoding=encoding)

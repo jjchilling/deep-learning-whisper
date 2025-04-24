@@ -1,4 +1,5 @@
 import os
+os.environ["RUST_BACKTRACE"] = "1"
 import random
 import numpy as np
 import tensorflow as tf
@@ -8,6 +9,8 @@ from whisper.audio import process_all_audio_files, load_audio, log_mel_spectrogr
 from whisper.decoder import decode, DecodingOptions
 from whisper.tokenizer import get_tokenizer
 from tqdm import tqdm
+from whisper.updatetokens import update_tok
+from whisper.remapped_tokenizer import build_remapped_tokenizer
 
 def load_dataset(data_dir, tokenizer, max_audio_len=3000):
     """
@@ -61,15 +64,15 @@ def split_dev_clean(dev_dir, split_ratio=0.8):
     
     return all_samples[:split_idx], all_samples[split_idx:]
 
-def train(model: Whisper, tokenizer: Tokenizer, dataset: tf.data.Dataset, epochs: int = 5):
+def train(model: Whisper, tokenizer: Tokenizer, dataset: tf.data.Dataset, epochs: int = 30):
     optimizer = tf.keras.optimizers.Adam(learning_rate=5*1e-4)
     
     loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
 
     for epoch in range(epochs):
         print(f"Epoch {epoch+1}/{epochs}")
-        if epoch == 5:
-            return
+        # if epoch == 5:
+        #     return
         progbar = tqdm(dataset, desc="Training", unit="batch")
         for step, (mel, target_tokens) in enumerate(dataset):
             mel = tf.transpose(mel, [0, 2, 1]) 
@@ -80,7 +83,7 @@ def train(model: Whisper, tokenizer: Tokenizer, dataset: tf.data.Dataset, epochs
 
                 logits = model(mel, decoder_input)
 
-                pad_token_id = tokenizer.special_tokens.get("pad", 0) # LOSS NOT CONTRIBUTE TO THE PREDICTION MASK :0
+                pad_token_id = getattr(tokenizer, "pad", 0) or 0 # LOSS NOT CONTRIBUTE TO THE PREDICTION MASK :0
 
                 mask = tf.cast(tf.not_equal(target_tokens, pad_token_id), dtype=tf.float32)
                 
@@ -103,30 +106,39 @@ def train(model: Whisper, tokenizer: Tokenizer, dataset: tf.data.Dataset, epochs
 
 
 def main():
+
+
+    print("Splitting dev-clean dataset...")
+    train_split, val_split = split_dev_clean("C:/Users/anant/Desktop/whisperdata/sample/121123")
+    #updated_vocab_path, updated_vocab_size = update_tok(train_split)
+    remap_tok, vocab_size = build_remapped_tokenizer(train_split=train_split)
+    print(f"Vocab Size: {vocab_size}")
     dims = ModelDimensions(
         n_mels=80,
         n_audio_ctx=3000,
         n_audio_state=384,
         n_audio_head=6,
         n_audio_layer=4,
-        n_vocab=100262,
+        n_vocab=vocab_size,
         n_text_ctx=448,
         n_text_state=384,
         n_text_head=6,
         n_text_layer=4
     )
     model = Whisper(dims)
-    tokenizer = get_tokenizer()
 
-
-    print("Splitting dev-clean dataset...")
-    train_split, val_split = split_dev_clean("/Users/julie_chung/Desktop/sample")
+    #tokenizer = get_tokenizer(name=remap_tok)
+    tokenizer = remap_tok
     print("Loading training data from dev-clean split...")
     train_dataset = []
     for audio_path, transcription in train_split:
         audio = load_audio(audio_path)
         mel = log_mel_spectrogram(pad_or_trim(audio))
-        tokens = tokenizer.encode(transcription)
+        try:
+            tokens = tokenizer.encode(transcription)
+        except Exception as e:
+            print(f"Failed on : {transcription}") 
+            raise
         train_dataset.append((mel, tokens))
 
     def gen():
@@ -145,7 +157,7 @@ def main():
     print("Starting training...")
 
 
-    train(model, tokenizer, train_dataset_tf, epochs=5)
+    train(model, tokenizer, train_dataset_tf, epochs=30)
     # dummy_mel = tf.zeros((1, 3000, 80))
     # dummy_tokens = tf.zeros((1, 10), dtype=tf.int32)
     # _ = model(dummy_mel, dummy_tokens)
