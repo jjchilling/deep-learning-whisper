@@ -9,7 +9,6 @@ from whisper.audio import process_all_audio_files, load_audio, log_mel_spectrogr
 from whisper.decoder import decode, DecodingOptions
 from whisper.tokenizer import get_tokenizer
 from tqdm import tqdm
-from whisper.updatetokens import update_tok
 from whisper.remapped_tokenizer import build_remapped_tokenizer
 
 def load_dataset(data_dir, tokenizer, max_audio_len=3000):
