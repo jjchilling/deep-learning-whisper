@@ -251,6 +251,8 @@ class TextDecoder(tf.keras.layers.Layer):
         x = self.token_embedding(x) + pos_embed_slice
         x = tf.cast(x, xa.dtype) 
 
+        noise = tf.random.normal(shape=tf.shape(x), mean=0.0, stddev=0.01)
+        x = x + noise
 
         for idx, block in enumerate(self.blocks):
             x = block(x, xa, mask=self.causal_mask, kv_cache=kv_cache)

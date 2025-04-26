@@ -10,7 +10,7 @@ from tqdm import tqdm
 # ---- CONFIGURATION ----
 DATA_DIR = "/Users/robertogonzales/Desktop/DL/WhisperData/sample"
 EPOCHS = 100
-LEARNING_RATE = 5e-4
+LEARNING_RATE = 1e-4
 BATCH_SIZE = 1
 
 # ---- FUNCTIONS ----
@@ -73,7 +73,7 @@ def test_model(model, tokenizer, train_samples):
         print("PR: ", predicted_text)
         print("WER: ", wer(ground_truth,predicted_text))
 
-    print("n✅ Done evaluating!")
+    print("n Done evaluating!")
 
 
 # ---- MAIN ----
