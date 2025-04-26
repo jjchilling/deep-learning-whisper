@@ -96,6 +96,7 @@ def get_encoding(name: str = "gpt2"):
     special_tokens = {}
 
     specials = [
+        "<|pad|>",
         "<|endoftext|>",
         "<|startoftranscript|>",
         "<|transcribe|>",

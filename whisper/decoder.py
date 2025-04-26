@@ -177,56 +177,54 @@ class DecodingTask:
             logits = filt.apply(logits, tokens)
         return logits
 
-    def _main_loop(self, audio_features, tokens):
+    def greedy_decode(self, audio_features, tokens,temperature=1.0):
         for _ in range(self.options.max_len):
             logits = self.decoder(tokens, audio_features)
             logits = logits[:, -1, :]
             logits = self.apply_filters(logits, tokens)
+            if temperature != 1.0:
+                logits = logits / temperature
             next_token = tf.argmax(logits, axis=-1, output_type=tf.int32)
             tokens = tf.concat([tokens, tf.expand_dims(next_token, axis=1)], axis=-1)
             if tf.reduce_all(tf.equal(next_token, self.tokenizer.eot)):
                 break
         return tokens
 
-    def run(self, mel):
+    def run(self, mel, model):
         if len(mel.shape) == 2:
             mel = tf.expand_dims(mel, axis=0)
-        audio_features = self.encoder(mel)
-        tokens = tf.constant([self.tokenizer.sot_sequence], dtype=tf.int32)
 
-        if self.options.beam_size:
-            token_ids = beam_search_decode(self.decoder, audio_features, self.tokenizer, self.apply_filters, beam_size=self.options.beam_size, max_len=self.options.max_len)
-        else:
-            token_ids = self._main_loop(audio_features, tokens)
+        decoded = [self.tokenizer.sot]
+        for _ in range(100):
+            decoder_input = tf.expand_dims(tf.constant(decoded, dtype=tf.int32), axis=0)
+            logits = model(mel, decoder_input)
+            next_token = tf.argmax(logits[:, -1, :], axis=-1).numpy()[0]
+            decoded.append(next_token)
+            if next_token == self.tokenizer.eot:
+                break
 
-        text = self.tokenizer.decode(token_ids[0].numpy().tolist())
-        return DecodingResult(token_ids[0], text)
+        text_pred = self.tokenizer.decode(decoded)
+        # audio_features = self.encoder(mel)
+        # tokens = tf.constant([[self.tokenizer.sot]], dtype=tf.int32)
+
+        # if self.options.beam_size:
+        #     token_ids = beam_search_decode(self.decoder, audio_features, self.tokenizer, self.apply_filters, beam_size=self.options.beam_size, max_len=self.options.max_len)
+        # else:
+        #     token_ids = self.greedy_decode(audio_features, tokens,self.options.temperature)
+
+        # text = self.tokenizer.decode(token_ids[0].numpy().tolist())
+        return DecodingResult(decoded, text_pred)
 
 def transcribe_from_mel(mel, encoder, decoder, tokenizer, beam_size=None):
     options = DecodingOptions(beam_size=beam_size)
     task = DecodingTask(encoder, decoder, tokenizer, options)
-    return task.run(mel)
+    return task.run(mel, model)
 
-def decode(encoder, decoder, tokenizer, mel, options=DecodingOptions()):
+def decode(encoder, decoder, tokenizer, mel, mode, options=DecodingOptions()):
     if len(mel.shape) == 2:
         mel = tf.expand_dims(mel, axis=0)
     task = DecodingTask(encoder, decoder, tokenizer, options)
-    return task.run(mel)
-
-def greedy_decode(decoder, audio_features, tokenizer, apply_filters, max_len=128, temperature=1.0):
-    tokens = tf.constant([tokenizer.sot_sequence], dtype=tf.int32)
-
-    for step in range(max_len):
-        logits = decoder(tokens, audio_features)
-        logits = logits[:, -1, :]
-        logits = apply_filters(logits, tokens)
-        if temperature != 1.0:
-            logits = logits / temperature
-        next_token = tf.argmax(logits, axis=-1, output_type=tf.int32)
-        tokens = tf.concat([tokens, tf.expand_dims(next_token, axis=1)], axis=-1)
-        if tf.reduce_all(tf.equal(next_token, tokenizer.eot)):
-            break
-    return tokens
+    return task.run(mel,mode)
 
 
 def beam_search_decode(decoder, audio_features, tokenizer, apply_filters, beam_size=5, max_len=128):
