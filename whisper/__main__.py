@@ -122,7 +122,7 @@ def main():
             with tf.GradientTape() as tape:
                 sot = tf.fill([tf.shape(target_tokens)[0], 1], tokenizer.sot)
                 decoder_input = tf.concat([sot, target_tokens[:, :-1]], axis=1)
-                logits = model(mel, decoder_input, True)
+                logits = model(mel, decoder_input, training = True)
                 mask = tf.cast(tf.not_equal(target_tokens, tokenizer.special_tokens["<|pad|>"]), tf.float32)
                 loss = loss_fn(target_tokens, logits, sample_weight=mask)
             grads = tape.gradient(loss, model.trainable_variables)

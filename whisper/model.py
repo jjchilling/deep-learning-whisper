@@ -312,7 +312,7 @@ class Whisper(tf.keras.Model):
     def call(
         self, mel: tf.Tensor, tokens: tf.Tensor, training = False
     ) -> Dict[str, tf.Tensor]:
-        return self.decoder(tokens, self.encoder(mel), training)
+        return self.decoder(tokens, self.encoder(mel), training = training)
 
     @property
     def is_multilingual(self):
