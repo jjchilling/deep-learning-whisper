@@ -89,7 +89,7 @@ class MultiHeadAttention(tf.keras.layers.Layer):
         self.key = Linear(n_state, use_bias=False)
         self.value = Linear(n_state)
         self.out = Linear(n_state)
-
+        self.dropout = tf.keras.layers.Dropout(0.1)
 
     def call(
         self,
@@ -109,6 +109,7 @@ class MultiHeadAttention(tf.keras.layers.Layer):
             v = kv_cache[self.value]
 
         wv, qk = self.qkv_attention(q, k, v, mask)
+        wv = self.dropout(wv)
         return self.out(wv), qk
 
     def qkv_attention(
@@ -144,10 +145,12 @@ class MLP(tf.keras.layers.Layer):
         self.dense1 = Linear(n_state * 4)
         self.gelu = tf.keras.layers.Activation('gelu')
         self.dense2 = Linear(n_state)
+        self.dropout = tf.keras.layers.Dropout(0.1) 
 
     def call(self, x):
         x = self.dense1(x)
         x = self.gelu(x)
+        x = self.dropout(x)
         x = self.dense2(x)
         return x
 
@@ -239,7 +242,7 @@ class TextDecoder(tf.keras.layers.Layer):
         mask = tf.where(mask == 1.0, tf.constant(-1e9, dtype=tf.float32), tf.constant(0.0, dtype=tf.float32))
         self.causal_mask = tf.constant(mask, dtype=tf.float32)
 
-    def call(self, x: tf.Tensor, xa: tf.Tensor, kv_cache: Optional[dict] = None):
+    def call(self, x: tf.Tensor, xa: tf.Tensor, kv_cache: Optional[dict] = None, training = False):
         """
         x : tf.Tensor, shape = (batch_size, <= n_ctx)
             input text tokens
@@ -250,9 +253,9 @@ class TextDecoder(tf.keras.layers.Layer):
         pos_embed_slice = self.positional_embedding[offset : offset + tf.shape(x)[-1]]
         x = self.token_embedding(x) + pos_embed_slice
         x = tf.cast(x, xa.dtype) 
-
-        noise = tf.random.normal(shape=tf.shape(x), mean=0.0, stddev=0.01)
-        x = x + noise
+        if training: 
+            noise = tf.random.normal(shape=tf.shape(x), mean=0.0, stddev=0.02)
+            x = x + noise
 
         for idx, block in enumerate(self.blocks):
             x = block(x, xa, mask=self.causal_mask, kv_cache=kv_cache)
@@ -307,9 +310,9 @@ class Whisper(tf.keras.Model):
         return self.decoder(tokens, audio_features)
 
     def call(
-        self, mel: tf.Tensor, tokens: tf.Tensor
+        self, mel: tf.Tensor, tokens: tf.Tensor, training = False
     ) -> Dict[str, tf.Tensor]:
-        return self.decoder(tokens, self.encoder(mel))
+        return self.decoder(tokens, self.encoder(mel), training)
 
     @property
     def is_multilingual(self):

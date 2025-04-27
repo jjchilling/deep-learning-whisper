@@ -8,8 +8,8 @@ from whisper.audio import load_audio, log_mel_spectrogram, pad_or_trim
 from tqdm import tqdm
 
 # ---- CONFIGURATION ----
-DATA_DIR = "/Users/robertogonzales/Desktop/DL/WhisperData/sample"
-EPOCHS = 100
+DATA_DIR = "/Users/robertogonzales/Desktop/DL/WhisperData/LibriSpeech/dev-clean"
+EPOCHS = 50
 LEARNING_RATE = 1e-4
 BATCH_SIZE = 1
 
@@ -86,7 +86,7 @@ def main():
     tokenizer = get_tokenizer()
 
     print("Splitting dataset...")
-    train_samples, _ = split_dataset(DATA_DIR)
+    train_samples, testing = split_dataset(DATA_DIR)
 
     print("Preparing data...")
     data = []
@@ -122,7 +122,7 @@ def main():
             with tf.GradientTape() as tape:
                 sot = tf.fill([tf.shape(target_tokens)[0], 1], tokenizer.sot)
                 decoder_input = tf.concat([sot, target_tokens[:, :-1]], axis=1)
-                logits = model(mel, decoder_input)
+                logits = model(mel, decoder_input, True)
                 mask = tf.cast(tf.not_equal(target_tokens, tokenizer.special_tokens["<|pad|>"]), tf.float32)
                 loss = loss_fn(target_tokens, logits, sample_weight=mask)
             grads = tape.gradient(loss, model.trainable_variables)
@@ -134,7 +134,7 @@ def main():
                 decoded = [tokenizer.sot]
                 for _ in range(100):
                     decoder_input = tf.expand_dims(tf.constant(decoded, dtype=tf.int32), axis=0)
-                    pred_logits = model(mel[:1], decoder_input)
+                    pred_logits = model(mel[:1], decoder_input, True)
                     next_token = tf.argmax(pred_logits[:, -1, :], axis=-1).numpy()[0]
                     decoded.append(next_token)
                     if next_token == tokenizer.eot:
@@ -147,7 +147,7 @@ def main():
 
     print("Saving model...")
     model.save_weights("trained_whisper_overfit.weights.h5")
-    test_model(model, tokenizer, train_samples)
+    test_model(model, tokenizer, testing)
 
 if __name__ == "__main__":
     main()
