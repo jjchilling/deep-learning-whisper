@@ -4,11 +4,11 @@ import numpy as np
 import tensorflow as tf
 from whisper.model import Whisper, ModelDimensions
 from whisper.tokenizer import get_tokenizer
-from whisper.audio import load_audio, log_mel_spectrogram, pad_or_trim
+from whisper.audio import load_audio, log_mel_spectrogram, pad_or_trim, view_random_mel_samples
 from tqdm import tqdm
 
 # ---- CONFIGURATION ----
-DATA_DIR = "/Users/robertogonzales/Desktop/DL/WhisperData/LibriSpeech/dev-clean"
+DATA_DIR = "C:/Users/anant/Desktop/whisperdata/sample/121123"
 EPOCHS = 50
 LEARNING_RATE = 1e-4
 BATCH_SIZE = 1
@@ -93,6 +93,7 @@ def main():
     for audio_path, transcription in train_samples:
         audio = load_audio(audio_path)
         mel = log_mel_spectrogram(pad_or_trim(audio, length=480000))
+        # view_random_mel_samples()
         mel = pad_or_trim(mel, length=3000, axis=-1)
         tokens = tokenizer.encode(transcription)
         tokens.append(tokenizer.eot)

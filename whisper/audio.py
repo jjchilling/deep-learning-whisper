@@ -100,16 +100,19 @@ def log_mel_spectrogram(
     magnitudes = tf.abs(stft) ** 2
     
     filters = mel_filters(n_mels)
+
+    mel_spec = tf.matmul(filters, tf.transpose(magnitudes))  
+    mel_spec = tf.transpose(mel_spec)  
+    print(f"mel shape: {tf.shape(mel_spec)}")
     
-    mel_spec = tf.matmul(magnitudes, tf.transpose(filters))
+    log_spec = 10.0 * tf.math.log(mel_spec) / tf.math.log(10.0) 
 
-    log_spec = tf.math.log(tf.clip_by_value(mel_spec, 1e-10, tf.reduce_max(mel_spec)))
+    log_spec = tf.clip_by_value(log_spec, -80.0, 0.0)  
 
-    log_spec = tf.maximum(log_spec, tf.reduce_max(log_spec) - 8.0)
-
-    log_spec = (log_spec + 4.0) / 4.0
+    log_spec = (log_spec+80.0)/80.0
 
     log_mel = tf.transpose(log_spec)
+    print(f"mel shape: {tf.shape(log_mel)}")
 
     return log_mel
 
@@ -161,6 +164,41 @@ def load_cached_mels(path: str = MEL_CACHE_PATH):
     with open(path, 'rb') as f:
         mels = pickle.load(f)
     return mels
+
+import random
+
+# def view_random_mel_samples(num_samples: int = 5):
+#     mels = process_all_audio_files(audio_dir="/CS1470 (Deep Learning)/deep-learning-whisper/audio")
+#     keys = list(mels.keys())
+#     selected_files = random.sample(keys, min(num_samples, len(keys)))
+
+#     for file in selected_files:
+#         mel = mels[file]
+#         # Plot the log Mel spectrogram
+#         plt.figure(figsize=(10, 4))
+#         plt.imshow(mel, aspect='auto', origin='lower', cmap='inferno', interpolation='none')
+#         plt.colorbar(format="%+2.0f dB")
+#         plt.title(f"Log Mel Spectrogram (n_mels={80})")
+#         plt.xlabel("Time (frames)")
+#         plt.ylabel("Mel frequency bins")
+#         plt.show()
+
+# def plot_log_mel_spectrogram(audio_file: str, n_mels: int = 80, device: Optional[Union[str, torch.device]] = None):
+#     # Load and process audio to get log Mel spectrogram
+#     log_mel_spec = log_mel_spectrogram(audio_file, n_mels=n_mels, device=device)
+
+#     # Convert the tensor to a numpy array for visualization
+#     log_mel_spec = log_mel_spec.cpu().numpy()
+
+#     # Plot the log Mel spectrogram
+#     plt.figure(figsize=(10, 4))
+#     plt.imshow(log_mel_spec, aspect='auto', origin='lower', cmap='inferno', interpolation='none')
+#     plt.colorbar(format="%+2.0f dB")
+#     plt.title(f"Log Mel Spectrogram (n_mels={n_mels})")
+#     plt.xlabel("Time (frames)")
+#     plt.ylabel("Mel frequency bins")
+#     plt.show()
+
 
 mel = load_cached_mels if MEL_CACHE_PATH != None else process_all_audio_files()
 
