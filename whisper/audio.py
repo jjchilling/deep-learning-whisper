@@ -103,7 +103,6 @@ def log_mel_spectrogram(
 
     mel_spec = tf.matmul(filters, tf.transpose(magnitudes))  
     mel_spec = tf.transpose(mel_spec)  
-    print(f"mel shape: {tf.shape(mel_spec)}")
     
     log_spec = 10.0 * tf.math.log(mel_spec) / tf.math.log(10.0) 
 
@@ -112,7 +111,6 @@ def log_mel_spectrogram(
     log_spec = (log_spec+80.0)/80.0
 
     log_mel = tf.transpose(log_spec)
-    print(f"mel shape: {tf.shape(log_mel)}")
 
     return log_mel
 
@@ -166,6 +164,8 @@ def load_cached_mels(path: str = MEL_CACHE_PATH):
     return mels
 
 import random
+
+## to plot graphs if needed
 
 # def view_random_mel_samples(num_samples: int = 5):
 #     mels = process_all_audio_files(audio_dir="/CS1470 (Deep Learning)/deep-learning-whisper/audio")

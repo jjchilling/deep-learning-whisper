@@ -1,5 +1,4 @@
 import tensorflow as tf
-import numpy as np
 
 class DecodingOptions:
     def __init__(self, beam_size=None, temperature=0.0, max_len=128, suppress_blank=True, suppress_tokens="-1", use_timestamps=False, max_initial_timestamp=None):
@@ -11,72 +10,9 @@ class DecodingOptions:
         self.use_timestamps = use_timestamps
         self.max_initial_timestamp = max_initial_timestamp
 
-class TokenAndPositionEmbedding(tf.keras.layers.Layer):
-    def __init__(self, vocab_size, max_len, embed_dim):
-        super().__init__()
-        self.token_emb = tf.keras.layers.Embedding(input_dim=vocab_size, output_dim=embed_dim)
-        self.pos_emb = self.add_weight(
-            shape=(max_len, embed_dim), initializer="random_normal", trainable=True, name="pos_embedding"
-        )
-
-    def call(self, x):
-        tf.print("token and pos embedding input shape: ", tf.shape(x))
-        #trial below
-        pos = tf.range(tf.shape(x)[1])
-        pos_emb = tf.gather(self.pos_emb, pos)
-        return self.token_emb(x) + pos_emb
-
-        # max_len = tf.shape(x)[-1]
-        # return self.token_emb(x) + self.pos_emb[:max_len]
-
-def mlp_block(embed_dim):
-    return tf.keras.Sequential([
-        tf.keras.layers.Dense(4 * embed_dim, activation=tf.keras.activations.gelu),
-        tf.keras.layers.Dense(embed_dim)
-    ])
-
-class DecoderBlock(tf.keras.layers.Layer):
-    def __init__(self, embed_dim, num_heads):
-        super().__init__()
-        self.self_attn = tf.keras.layers.MultiHeadAttention(num_heads=num_heads, key_dim=embed_dim)
-        self.cross_attn = tf.keras.layers.MultiHeadAttention(num_heads=num_heads, key_dim=embed_dim)
-        self.mlp = mlp_block(embed_dim)
-        self.ln1 = tf.keras.layers.LayerNormalization()
-        self.ln2 = tf.keras.layers.LayerNormalization()
-        self.ln3 = tf.keras.layers.LayerNormalization()
-
-    def call(self, x, audio_features, causal_mask=None):
-        x = x + self.self_attn(query=self.ln1(x), value=x, key=x, attention_mask=causal_mask)
-        tf.print("audio features shape:", tf.shape(audio_features))
-        x = x + self.cross_attn(query=self.ln2(x), value=audio_features, key=audio_features)
-        x = x + self.mlp(self.ln3(x))
-        return x
-
-class WhisperDecoder(tf.keras.Model):
-    def __init__(self, vocab_size, max_len, embed_dim, num_heads, num_layers):
-        super().__init__()
-        self.embedding = TokenAndPositionEmbedding(vocab_size, max_len, embed_dim)
-        self.blocks = [DecoderBlock(embed_dim, num_heads) for _ in range(num_layers)]
-        self.ln = tf.keras.layers.LayerNormalization()
-        self.output_proj = tf.keras.layers.Dense(vocab_size)
-
-    def call(self, tokens, audio_features, kv_cache=None):
-        tf.print("Entered WhisperDecoder.call")
-        x = self.embedding(tokens)
-        seq_len = tf.shape(tokens)[1]
-        causal_mask = tf.linalg.band_part(tf.ones((seq_len, seq_len)), -1, 0)
-        causal_mask = tf.reshape(causal_mask, [1, 1, seq_len, seq_len])
-
-        for i, block in enumerate(self.blocks):
-            x = block(x, audio_features, causal_mask=causal_mask)
-
-        x = self.ln(x)
-        return self.output_proj(x)
-
 class LogitFilter:
     def apply(self, logits, tokens):
         pass
-
 
 class SuppressBlank(LogitFilter):
     def __init__(self, tokenizer, sample_begin):
@@ -142,6 +78,7 @@ class DecodingResult:
     def __init__(self, tokens, text):
         self.tokens = tokens
         self.text = text
+        
 # class RepetitionPenalty(LogitFilter):
 #     def __init__(self, penalty: float = 1.2):
 #         self.penalty = penalty
@@ -244,7 +181,7 @@ def beam_search_decode(decoder, audio_features, tokenizer, apply_filters, beam_s
             for i in range(beam_size):
                 next_token = topk_tokens[0, i]
                 next_score = score + float(topk_log_probs[0, i].numpy())
-                new_seq = tf.concat([tokens, tf.expand_dims(next_token, axis=0)], axis=0)  # shape (T+1,)
+                new_seq = tf.concat([tokens, tf.expand_dims(next_token, axis=0)], axis=0) 
                 all_candidates.append((new_seq, next_score))
 
         sequences = sorted(all_candidates, key=lambda tup: tup[1], reverse=True)[:beam_size]

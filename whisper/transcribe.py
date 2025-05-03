@@ -191,11 +191,9 @@ def transcribe(
         for t in temperatures:
             kwargs = {**decode_options}
             if t > 0:
-                # disable beam_size and patience when t > 0
                 kwargs.pop("beam_size", None)
                 kwargs.pop("patience", None)
             else:
-                # disable best_of when t == 0
                 kwargs.pop("best_of", None)
 
             options = DecodingOptions(**kwargs, temperature=t)

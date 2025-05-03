@@ -2,18 +2,17 @@ import os
 import random
 import numpy as np
 import tensorflow as tf
+import tensorflow_addons as tfa
 from whisper.model import Whisper, ModelDimensions
 from whisper.tokenizer import get_tokenizer
-from whisper.audio import load_audio, log_mel_spectrogram, pad_or_trim, view_random_mel_samples
+from whisper.audio import load_audio, log_mel_spectrogram, pad_or_trim
 from tqdm import tqdm
 
-# ---- CONFIGURATION ----
-DATA_DIR = "C:/Users/anant/Desktop/whisperdata/sample/121123"
+DATA_DIR = "/Users/robertogonzales/Desktop/DL/WhisperData/sample"
 EPOCHS = 50
 LEARNING_RATE = 1e-4
-BATCH_SIZE = 1
+BATCH_SIZE = 1  
 
-# ---- FUNCTIONS ----
 def split_dataset(dev_dir, split_ratio=0.8):
     all_samples = []
     for root, _, files in os.walk(dev_dir):
@@ -45,10 +44,28 @@ def wer(ref, hyp):
                 mat[i][j] = min(mat[i-1][j-1]+1, mat[i][j-1]+1, mat[i-1][j]+1)
     return mat[len(ref)][len(hyp)] / len(ref)
 
-def test_model(model, tokenizer, train_samples):
-    print("\\nEvaluating on training data...")
-    for audio_path, transcription in train_samples:
-        # Load and process audio
+class WarmupCosineSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
+    def __init__(self, initial_lr, total_steps, warmup_steps=100):
+        super().__init__()
+        self.initial_lr = initial_lr
+        self.total_steps = total_steps
+        self.warmup_steps = warmup_steps
+
+    def __call__(self, step):
+        step = tf.cast(step, tf.float32)
+        warmup_steps = tf.cast(self.warmup_steps, tf.float32)
+        total_steps = tf.cast(self.total_steps, tf.float32)
+
+        lr = tf.cond(
+            step < warmup_steps,
+            lambda: self.initial_lr * (step / warmup_steps),
+            lambda: self.initial_lr * 0.5 * (1 + tf.cos(np.pi * (step - warmup_steps) / (total_steps - warmup_steps)))
+        )
+        return lr
+
+def test_model(model, tokenizer, test_samples):
+    print("\nEvaluating on testing data...")
+    for audio_path, transcription in test_samples:
         audio = load_audio(audio_path)
         mel = log_mel_spectrogram(pad_or_trim(audio, length=480000))
         mel = pad_or_trim(mel, length=3000, axis=-1)
@@ -68,15 +85,12 @@ def test_model(model, tokenizer, train_samples):
         predicted_text = tokenizer.decode(decoded_tokens)
         ground_truth = transcription
 
-
-        print("nGT:", ground_truth)
+        print("\nGT:", ground_truth)
         print("PR: ", predicted_text)
-        print("WER: ", wer(ground_truth,predicted_text))
+        print("WER:", wer(ground_truth, predicted_text))
+    print("\nDone evaluating!")
 
-    print("n Done evaluating!")
 
-
-# ---- MAIN ----
 def main():
     dims = ModelDimensions(
         n_mels=80, n_audio_ctx=3000, n_audio_state=384, n_audio_head=6, n_audio_layer=4,
@@ -86,14 +100,13 @@ def main():
     tokenizer = get_tokenizer()
 
     print("Splitting dataset...")
-    train_samples, testing = split_dataset(DATA_DIR)
+    train_samples, test_samples = split_dataset(DATA_DIR)
 
     print("Preparing data...")
     data = []
     for audio_path, transcription in train_samples:
         audio = load_audio(audio_path)
         mel = log_mel_spectrogram(pad_or_trim(audio, length=480000))
-        # view_random_mel_samples()
         mel = pad_or_trim(mel, length=3000, axis=-1)
         tokens = tokenizer.encode(transcription)
         tokens.append(tokenizer.eot)
@@ -111,7 +124,9 @@ def main():
         )
     ).padded_batch(BATCH_SIZE)
 
-    optimizer = tf.keras.optimizers.Adam(learning_rate=LEARNING_RATE)
+    total_steps = EPOCHS * (len(data) // BATCH_SIZE)
+    lr_schedule = WarmupCosineSchedule(LEARNING_RATE, total_steps)
+    optimizer = tfa.optimizers.AdamW(learning_rate=lr_schedule, weight_decay=1e-4)
     loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
 
     print("Starting training...")
@@ -119,23 +134,25 @@ def main():
         print(f"\nEpoch {epoch+1}/{EPOCHS}")
         progbar = tqdm(dataset, desc="Training", unit="batch")
         for step, (mel, target_tokens) in enumerate(progbar):
-            mel = tf.transpose(mel, [0, 2, 1])  # (B, 3000, 80)
+            mel = tf.transpose(mel, [0, 2, 1])
+
             with tf.GradientTape() as tape:
-                sot = tf.fill([tf.shape(target_tokens)[0], 1], tokenizer.sot)
+                sot = tf.fill([tf.shape(target_tokens)[0], 1], tokenizer.sot)  
                 decoder_input = tf.concat([sot, target_tokens[:, :-1]], axis=1)
-                logits = model(mel, decoder_input, training = True)
+
+                logits = model(mel, decoder_input, training=True)
+
                 mask = tf.cast(tf.not_equal(target_tokens, tokenizer.special_tokens["<|pad|>"]), tf.float32)
                 loss = loss_fn(target_tokens, logits, sample_weight=mask)
             grads = tape.gradient(loss, model.trainable_variables)
             optimizer.apply_gradients(zip(grads, model.trainable_variables))
 
             progbar.set_postfix(loss=loss.numpy())
-
-            if step % 10 == 0:
+            if step % 90 == 0:
                 decoded = [tokenizer.sot]
                 for _ in range(100):
                     decoder_input = tf.expand_dims(tf.constant(decoded, dtype=tf.int32), axis=0)
-                    pred_logits = model(mel[:1], decoder_input, True)
+                    pred_logits = model(mel[:1], decoder_input, training=False)
                     next_token = tf.argmax(pred_logits[:, -1, :], axis=-1).numpy()[0]
                     decoded.append(next_token)
                     if next_token == tokenizer.eot:
@@ -146,9 +163,9 @@ def main():
                 print(f"PR: {prediction}")
                 print(f"WER: {wer(reference, prediction):.2f}\n")
 
-    print("Saving model...")
-    model.save_weights("trained_whisper_overfit.weights.h5")
-    test_model(model, tokenizer, testing)
+    print("Training complete! Testing best model...")
+    model.load_weights("best_whisper_model.weights.h5")
+    test_model(model, tokenizer, test_samples)
 
 if __name__ == "__main__":
     main()
