@@ -1,0 +1,4 @@
+How to run:
+1. First go to __main__.py and modify path for the audio folder at the beginning of the document to the desired path. 
+2. Ater, change any hyper parameters if needed. 
+3. At last run: python -m whisper  
